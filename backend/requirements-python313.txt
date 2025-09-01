@@ -1,0 +1,48 @@
+# Python 3.13 Compatible Requirements
+# These packages are tested and compatible with Python 3.13
+
+# Core FastAPI dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.20
+python-dotenv>=1.0.1
+
+# Pydantic and validation
+pydantic>=2.10.0
+pydantic-settings>=2.8.0
+
+# HTTP client
+httpx>=0.28.0
+
+# Database
+supabase>=2.8.0
+
+# AI dependencies - Python 3.13 compatible
+openai>=1.60.0
+
+# Data analysis - Python 3.13 compatible versions
+pandas>=2.2.0
+numpy>=1.26.0
+matplotlib>=3.10.0
+seaborn>=0.13.0
+
+# Basic utilities
+python-dateutil>=2.9.0
+pytz>=2024.1
+
+# Development tools
+pytest>=8.2.0
+black>=24.10.0
+
+# Alternative packages for Python 3.13
+# Use these if the above versions fail
+# fastapi>=0.104.0
+# uvicorn[standard]>=0.24.0
+# pydantic>=2.5.0
+# pandas>=2.1.0
+# numpy>=1.25.0
+
+
+
+
+

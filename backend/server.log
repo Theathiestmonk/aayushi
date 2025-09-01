@@ -1,0 +1,13 @@
+INFO:     Started server process [50446]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+✅ API router imported successfully
+✅ API router included successfully
+🚀 Starting AI Dietitian Agent System...
+✅ Environment loaded
+INFO:     127.0.0.1:55679 - "POST /api/v1/diet-plans/force-clear HTTP/1.1" 403 Forbidden
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [50446]

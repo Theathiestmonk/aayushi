@@ -1,0 +1,397 @@
+"""
+Authentication endpoints for user login, registration, and session management
+"""
+
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr, Field
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
+import logging
+
+from app.core.supabase import supabase_manager
+from app.core.security import create_access_token, verify_token
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+security = HTTPBearer()
+
+# Request Models
+class UserRegistration(BaseModel):
+    """User registration request model"""
+    full_name: str = Field(..., min_length=2, description="User's full name")
+    email: EmailStr = Field(..., description="User's email address")
+    password: str = Field(..., min_length=8, description="User's password (min 8 characters)")
+
+class UserLogin(BaseModel):
+    """User login request model"""
+    email: EmailStr = Field(..., description="User's email address")
+    password: str = Field(..., description="User's password")
+
+class PasswordReset(BaseModel):
+    """Password reset request model"""
+    email: EmailStr = Field(..., description="User's email address")
+
+class TokenResponse(BaseModel):
+    """Authentication token response model"""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user_id: str
+    email: str
+    username: str
+
+class AuthResponse(BaseModel):
+    """Authentication response model"""
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+@router.post("/register", response_model=AuthResponse, summary="Register a new user")
+async def register_user(user_data: UserRegistration):
+    """
+    Register a new user account
+    
+    - **email**: User's email address (must be unique)
+    - **password**: User's password (minimum 8 characters)
+    - **full_name**: User's full name
+    """
+    try:
+        # Prepare user data for Supabase
+        supabase_user_data = {
+            "full_name": user_data.full_name or "",
+        }
+        
+        # Register user with Supabase
+        result = await supabase_manager.sign_up(
+            email=user_data.email,
+            password=user_data.password,
+            user_data=supabase_user_data
+        )
+        
+        if result["success"]:
+            # Check if email confirmation is required
+            if result.get("user") and not result.get("session"):
+                # Email confirmation required
+                return AuthResponse(
+                    success=True,
+                    message="Registration successful! Please check your email to confirm your account before signing in.",
+                    data={
+                        "email": user_data.email,
+                        "email_confirmation_required": True,
+                        "message": "Please check your email to confirm your account",
+                        "redirect_to": "email_confirmation"
+                    }
+                )
+            elif result.get("session"):
+                # User is automatically confirmed (if Supabase settings allow)
+                user_id = result["user"].id
+                access_token = create_access_token(
+                    data={"sub": user_id, "email": user_data.email}
+                )
+                
+                return AuthResponse(
+                    success=True,
+                    message="Registration successful! You can now sign in.",
+                    data={
+                        "user_id": user_id,
+                        "email": user_data.email,
+                        "full_name": user_data.full_name,
+                        "access_token": access_token,
+                        "profile": result["profile"],
+                        "redirect_to": "dashboard"
+                    }
+                )
+            else:
+                return AuthResponse(
+                    success=True,
+                    message="Registration successful! Please check your email to confirm your account.",
+                    data={
+                        "email": user_data.email,
+                        "email_confirmation_required": True,
+                        "redirect_to": "email_confirmation"
+                    }
+                )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Registration failed: {result.get('error', 'Unknown error')}"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ User registration failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+@router.post("/login", response_model=AuthResponse, summary="Authenticate user")
+async def login_user(user_credentials: UserLogin):
+    """
+    Authenticate an existing user
+    
+    - **email**: User's email address
+    - **password**: User's password
+    """
+    try:
+        # Sign in user with Supabase
+        result = await supabase_manager.sign_in(
+            email=user_credentials.email,
+            password=user_credentials.password
+        )
+        
+        if result["success"]:
+            # Create JWT token
+            user_id = result["user"].id
+            access_token = create_access_token(
+                data={"sub": user_id, "email": user_credentials.email}
+            )
+            
+            # Check onboarding status from profile
+            profile = result["profile"]
+            onboarding_completed = profile.get("onboarding_completed", False) if profile else False
+            
+            logger.info(f"✅ User logged in successfully: {user_credentials.email}")
+            logger.info(f"📋 Onboarding status: {onboarding_completed}")
+            
+            return AuthResponse(
+                success=True,
+                message="Login successful",
+                data={
+                    "user_id": user_id,
+                    "email": user_credentials.email,
+                    "username": profile.get("username", ""),
+                    "access_token": access_token,
+                    "profile": {
+                        **profile,
+                        "onboarding_completed": onboarding_completed
+                    }
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ User login failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Login failed: {str(e)}"
+        )
+
+@router.post("/logout", response_model=AuthResponse, summary="Sign out user")
+async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Sign out the current user
+    
+    Requires valid Bearer token in Authorization header
+    """
+    try:
+        # Verify the token
+        payload = verify_token(credentials.credentials)
+        user_id = payload.get("sub")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Sign out from Supabase
+        result = await supabase_manager.sign_out(credentials.credentials)
+        
+        if result["success"]:
+            logger.info(f"✅ User logged out successfully: {user_id}")
+            
+            return AuthResponse(
+                success=True,
+                message="Logout successful"
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Logout failed: {result.get('error', 'Unknown error')}"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ User logout failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Logout failed: {str(e)}"
+        )
+
+@router.post("/reset-password", response_model=AuthResponse, summary="Request password reset")
+async def request_password_reset(reset_data: PasswordReset):
+    """
+    Send password reset email to user
+    
+    - **email**: User's email address
+    """
+    try:
+        # Send password reset email via Supabase
+        result = await supabase_manager.reset_password(reset_data.email)
+        
+        if result["success"]:
+            logger.info(f"✅ Password reset email sent: {reset_data.email}")
+            
+            return AuthResponse(
+                success=True,
+                message="Password reset email sent. Please check your email."
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Password reset failed: {result.get('error', 'Unknown error')}"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Password reset failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Password reset failed: {str(e)}"
+        )
+
+@router.get("/me", response_model=AuthResponse, summary="Get current user profile")
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Get the current user's profile information
+    
+    Requires valid Bearer token in Authorization header
+    """
+    try:
+        # Verify the token
+        payload = verify_token(credentials.credentials)
+        user_id = payload.get("sub")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Get user profile from Supabase (handle case where user hasn't completed onboarding)
+        result = await supabase_manager.get_user_profile(user_id)
+        
+        if result["success"]:
+            # User has a complete profile
+            profile_data = result["profile"]
+            profile_data["onboarding_completed"] = profile_data.get("onboarding_completed", False)
+            
+            return AuthResponse(
+                success=True,
+                message="Profile retrieved successfully",
+                data=profile_data
+            )
+        else:
+            # User doesn't have a profile yet (hasn't completed onboarding)
+            # Return basic info from the JWT token
+            email = payload.get("email", "")
+            return AuthResponse(
+                success=True,
+                message="Basic user info retrieved",
+                data={
+                    "id": user_id,
+                    "email": email,
+                    "username": email.split('@')[0] if email else "",
+                    "full_name": "",
+                    "onboarding_completed": False,
+                    "created_at": None,
+                    "updated_at": None
+                }
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to get user profile: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get profile: {str(e)}"
+        )
+
+@router.post("/verify-session", response_model=AuthResponse, summary="Verify user session")
+async def verify_session(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Verify if the current user session is valid
+    
+    Requires valid Bearer token in Authorization header
+    """
+    try:
+        # Verify the token
+        payload = verify_token(credentials.credentials)
+        user_id = payload.get("sub")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Verify session with Supabase
+        result = await supabase_manager.verify_user_session(credentials.credentials)
+        
+        if result["success"] and result["valid"]:
+            return AuthResponse(
+                success=True,
+                message="Session is valid",
+                data={"user_id": user_id, "valid": True}
+            )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid session"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Session verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Session verification failed: {str(e)}"
+        )
+
+@router.get("/health", summary="Authentication service health check")
+async def auth_health_check():
+    """Check if the authentication service is healthy"""
+    try:
+        # Basic health check
+        return {
+            "status": "healthy",
+            "service": "authentication",
+            "timestamp": datetime.utcnow().isoformat(),
+            "supabase_connected": True
+        }
+    except Exception as e:
+        logger.error(f"❌ Authentication health check failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Authentication service unhealthy: {str(e)}"
+        )
+
+@router.get("/test-supabase", summary="Test Supabase connection")
+async def test_supabase():
+    """
+    Test Supabase connection and configuration
+    """
+    try:
+        from app.core.supabase import supabase_manager
+        
+        # Test basic connection
+        test_result = {
+            "supabase_url": supabase_manager.supabase_url,
+            "supabase_key_set": bool(supabase_manager.supabase_key),
+            "connection_status": "Testing..."
+        }
+        
+        # Try to get project info
+        try:
+            # This will test if we can connect to Supabase
+            project_info = supabase_manager.client.auth.get_session()
+            test_result["connection_status"] = "✅ Connected successfully"
+            test_result["project_info"] = "Connection verified"
+        except Exception as e:
+            test_result["connection_status"] = f"❌ Connection failed: {str(e)}"
+        
+        return {
+            "success": True,
+            "message": "Supabase connection test",
+            "data": test_result
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Test failed: {str(e)}"
+        }
+
