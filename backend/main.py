@@ -111,12 +111,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router if available
-if api_router:
-    app.include_router(api_router, prefix="/api/v1")
-    print("✅ API router included successfully")
-else:
-    print("⚠️ API router not available - auth endpoints will not work")
+# Always include API router (either the main one or the fallback)
+app.include_router(api_router, prefix="/api/v1")
+print("✅ API router included successfully")
 
 @app.get("/")
 async def root():
