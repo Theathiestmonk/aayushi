@@ -17,7 +17,7 @@ import {
   AlertCircle,
   Loader2,
   Calendar,
-  AlertTriangle,
+
   Trash2
 } from 'lucide-react';
 

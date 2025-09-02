@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 import { apiRequest } from '../utils/api';
 import { 
   Calendar,
-  Clock,
+
   Utensils,
   Apple,
   Target,
@@ -17,7 +17,7 @@ import {
   ChevronRight,
   Plus,
   Edit,
-  Trash2
+
 } from 'lucide-react';
 
 interface DietPlan {
@@ -164,9 +164,7 @@ const DietPlans: React.FC = () => {
     });
   };
 
-  const formatTime = (timeString: string) => {
-    return timeString;
-  };
+
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
