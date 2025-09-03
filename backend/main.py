@@ -180,6 +180,14 @@ async def cors_test():
         "environment": os.getenv("ENVIRONMENT", "development")
     }
 
+# Add API test endpoint
+@app.get("/api-test")
+async def api_test():
+    return {
+        "message": "API is working!",
+        "routes": [route.path for route in app.routes if hasattr(route, 'path')]
+    }
+
 # Always include API router (either the main one or the fallback)
 app.include_router(api_router, prefix="/api/v1")
 print("✅ API router included successfully")
