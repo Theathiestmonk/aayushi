@@ -110,9 +110,24 @@ def get_allowed_origins():
     """Get allowed origins based on environment"""
     # If ALLOWED_ORIGINS is set in environment, use it
     if os.getenv("ALLOWED_ORIGINS"):
-        origins = os.getenv("ALLOWED_ORIGINS").split(",")
-        # Clean up any extra quotes or whitespace
-        origins = [origin.strip().strip('"').strip("'") for origin in origins]
+        origins_str = os.getenv("ALLOWED_ORIGINS")
+        print(f"🔍 Raw ALLOWED_ORIGINS: {origins_str}")
+        
+        # Clean up the string first
+        origins_str = origins_str.strip()
+        
+        # Remove outer brackets if present
+        if origins_str.startswith('[') and origins_str.endswith(']'):
+            origins_str = origins_str[1:-1]
+        
+        # Split by comma and clean each origin
+        origins = []
+        for origin in origins_str.split(","):
+            origin = origin.strip().strip('"').strip("'").strip()
+            if origin:
+                origins.append(origin)
+        
+        print(f"🔧 Cleaned origins: {origins}")
         return origins
     
     # Check environment from multiple sources
@@ -151,8 +166,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Add a simple CORS test endpoint
