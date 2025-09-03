@@ -110,16 +110,25 @@ def get_allowed_origins():
     """Get allowed origins based on environment"""
     # If ALLOWED_ORIGINS is set in environment, use it
     if os.getenv("ALLOWED_ORIGINS"):
-        return os.getenv("ALLOWED_ORIGINS").split(",")
+        origins = os.getenv("ALLOWED_ORIGINS").split(",")
+        # Clean up any extra quotes or whitespace
+        origins = [origin.strip().strip('"').strip("'") for origin in origins]
+        return origins
+    
+    # Check environment from multiple sources
+    env = os.getenv("ENVIRONMENT", "development")
+    print(f"🔍 Environment detected: {env}")
     
     # Auto-detect based on environment
-    if settings.ENVIRONMENT == "production":
-        return [
+    if env == "production" or settings.ENVIRONMENT == "production":
+        origins = [
             "https://aayushi-seven.vercel.app",
             "https://aayushi-seven.vercel.app/",
         ]
+        print(f"🌐 Production CORS origins: {origins}")
+        return origins
     else:
-        return [
+        origins = [
             "http://localhost:3000",
             "http://localhost:3001", 
             "http://localhost:5173",
@@ -127,9 +136,16 @@ def get_allowed_origins():
             "http://127.0.0.1:3001",
             "http://127.0.0.1:5173",
         ]
+        print(f"🌐 Development CORS origins: {origins}")
+        return origins
 
 allowed_origins = get_allowed_origins()
 print(f"🌐 CORS allowed origins: {allowed_origins}")
+print(f"🔧 CORS middleware configuration:")
+print(f"   - allow_origins: {allowed_origins}")
+print(f"   - allow_credentials: True")
+print(f"   - allow_methods: ['*']")
+print(f"   - allow_headers: ['*']")
 
 app.add_middleware(
     CORSMiddleware,
@@ -138,6 +154,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add a simple CORS test endpoint
+@app.get("/cors-test")
+async def cors_test():
+    return {
+        "message": "CORS is working!",
+        "allowed_origins": allowed_origins,
+        "environment": os.getenv("ENVIRONMENT", "development")
+    }
 
 # Always include API router (either the main one or the fallback)
 app.include_router(api_router, prefix="/api/v1")
