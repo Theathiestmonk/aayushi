@@ -197,21 +197,14 @@ async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(securi
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Sign out from Supabase
-        result = await supabase_manager.sign_out(credentials.credentials)
+        # For now, just return success without calling Supabase sign_out
+        # since we're using our own JWT tokens, not Supabase session tokens
+        logger.info(f"✅ User logged out successfully: {user_id}")
         
-        if result["success"]:
-            logger.info(f"✅ User logged out successfully: {user_id}")
-            
-            return AuthResponse(
-                success=True,
-                message="Logout successful"
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Logout failed: {result.get('error', 'Unknown error')}"
-            )
+        return AuthResponse(
+            success=True,
+            message="Logout successful"
+        )
             
     except Exception as e:
         logger.error(f"❌ User logout failed: {str(e)}")

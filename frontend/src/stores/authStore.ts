@@ -43,8 +43,26 @@ export interface AuthActions {
 
 export interface AuthStore extends AuthState, AuthActions {}
 
-// API base URL
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+// API base URL - automatically detects environment
+const getApiBaseUrl = () => {
+  // If environment variable is set, use it
+  if ((import.meta as any).env?.VITE_API_URL) {
+    return (import.meta as any).env.VITE_API_URL;
+  }
+  
+  // Auto-detect environment based on hostname
+  const hostname = window.location.hostname;
+  
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:8000'; // Local development
+  } else if (hostname.includes('vercel.app')) {
+    return 'https://aayushi-4swl.onrender.com'; // Production
+  } else {
+    return 'http://localhost:8000'; // Default fallback
+  }
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // API helper functions
 const apiRequest = async (endpoint: string, options: RequestInit = {}) => {

@@ -102,10 +102,38 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - automatically configures for local and production
+import os
+from app.core.config import settings
+
+def get_allowed_origins():
+    """Get allowed origins based on environment"""
+    # If ALLOWED_ORIGINS is set in environment, use it
+    if os.getenv("ALLOWED_ORIGINS"):
+        return os.getenv("ALLOWED_ORIGINS").split(",")
+    
+    # Auto-detect based on environment
+    if settings.ENVIRONMENT == "production":
+        return [
+            "https://aayushi-seven.vercel.app",
+            "https://aayushi-seven.vercel.app/",
+        ]
+    else:
+        return [
+            "http://localhost:3000",
+            "http://localhost:3001", 
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:5173",
+        ]
+
+allowed_origins = get_allowed_origins()
+print(f"🌐 CORS allowed origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for testing
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

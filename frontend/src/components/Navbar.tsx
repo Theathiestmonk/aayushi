@@ -1,15 +1,21 @@
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Bell, User, LogOut } from 'lucide-react'
+import { useAuthStore } from '../stores/authStore'
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate()
+  const { logout, user } = useAuthStore()
 
-  const handleLogout = () => {
-    // Clear any stored tokens/user data
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    navigate('/login')
+  const handleLogout = async () => {
+    try {
+      await logout()
+      navigate('/login')
+    } catch (error) {
+      console.error('Logout failed:', error)
+      // Still navigate to login even if logout fails
+      navigate('/login')
+    }
   }
 
   return (
@@ -50,7 +56,9 @@ const Navbar: React.FC = () => {
             <div className="relative">
               <button className="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
                 <User className="w-5 h-5" />
-                <span className="hidden md:block text-sm font-medium">User</span>
+                <span className="hidden md:block text-sm font-medium">
+                  {user?.username || user?.email || 'User'}
+                </span>
               </button>
             </div>
             <button

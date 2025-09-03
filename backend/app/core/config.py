@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "AI Dietitian Agent System"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     
     # Server settings
     HOST: str = "0.0.0.0"
@@ -72,6 +72,25 @@ class Settings(BaseSettings):
     ENABLE_METRICS: bool = True
     METRICS_PORT: int = 9090
     
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Auto-detect environment if not explicitly set
+        if not os.getenv("ENVIRONMENT"):
+            self.ENVIRONMENT = self._detect_environment()
+    
+    def _detect_environment(self) -> str:
+        """Auto-detect environment based on common indicators"""
+        # Check for common production indicators
+        if os.getenv("RENDER") or os.getenv("VERCEL") or os.getenv("HEROKU"):
+            return "production"
+        
+        # Check if running in a container
+        if os.path.exists("/.dockerenv") or os.getenv("DOCKER"):
+            return "production"
+        
+        # Default to development
+        return "development"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
