@@ -188,6 +188,14 @@ async def api_test():
         "routes": [route.path for route in app.routes if hasattr(route, 'path')]
     }
 
+# Add a simple login test endpoint
+@app.post("/api/v1/auth/login")
+async def simple_login():
+    return {
+        "message": "Login endpoint is working!",
+        "status": "success"
+    }
+
 # Always include API router (either the main one or the fallback)
 app.include_router(api_router, prefix="/api/v1")
 print("✅ API router included successfully")
