@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, apiRequest } from '@/stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, 
@@ -109,24 +109,21 @@ const Profile: React.FC = () => {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/v1/onboarding/profile', {
+      
+      // Use the exported apiRequest function
+      const data = await apiRequest('/onboarding/profile', {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
         },
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch profile: ${response.status}`);
-      }
-
-      const data = await response.json();
+      
       if (data.success && data.data.profile) {
         setProfile(data.data.profile);
       } else {
         throw new Error('Profile data not found');
       }
     } catch (err) {
+      console.error('Profile fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
     } finally {
       setLoading(false);

@@ -17,7 +17,7 @@ import {
   Lock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, apiRequest } from '@/stores/authStore';
 
 // Step-based validation schemas
 const stepSchemas = {
@@ -483,34 +483,19 @@ const Onboarding: React.FC = () => {
         },
       };
 
-      const response = await fetch('/api/v1/onboarding/submit', {
+      // Use the exported apiRequest function
+      const result = await apiRequest('/onboarding/submit', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(onboardingData),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Onboarding successful:', result);
-        // Redirect to dashboard after successful onboarding
-        navigate('/dashboard');
-        setOnboardingCompleted(true); // Update onboarding status in auth store
-              } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('❌ Onboarding failed:', response.status, errorData);
-          
-          // Check if it's a token expiration error
-          if (errorData.detail && errorData.detail.includes('Signature has expired')) {
-            console.log('⏰ Token expired, redirecting to login');
-            navigate('/login');
-            throw new Error('Your session has expired. Please log in again to continue.');
-          } else {
-            throw new Error(`Failed to submit onboarding data: ${response.status} - ${errorData.detail || 'Unknown error'}`);
-          }
-        }
+      console.log('✅ Onboarding successful:', result);
+      // Redirect to dashboard after successful onboarding
+      navigate('/dashboard');
+      setOnboardingCompleted(true); // Update onboarding status in auth store
     } catch (error) {
       console.error('Onboarding submission failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit onboarding data. Please try again.';

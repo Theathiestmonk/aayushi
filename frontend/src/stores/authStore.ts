@@ -47,17 +47,22 @@ export interface AuthStore extends AuthState, AuthActions {}
 const getApiBaseUrl = () => {
   // If environment variable is set, use it
   if ((import.meta as any).env?.VITE_API_URL) {
+    console.log('🔧 Using VITE_API_URL:', (import.meta as any).env.VITE_API_URL);
     return (import.meta as any).env.VITE_API_URL;
   }
   
   // Auto-detect environment based on hostname
   const hostname = window.location.hostname;
+  console.log('🌐 Detected hostname:', hostname);
   
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    console.log('🏠 Using localhost API');
     return 'http://localhost:8000'; // Local development
   } else if (hostname.includes('vercel.app')) {
+    console.log('☁️ Using production API for Vercel');
     return 'https://aayushi-4swl.onrender.com'; // Production
   } else {
+    console.log('⚠️ Using fallback localhost API');
     return 'http://localhost:8000'; // Default fallback
   }
 };
@@ -65,8 +70,10 @@ const getApiBaseUrl = () => {
 const API_BASE_URL = getApiBaseUrl();
 
 // API helper functions
-const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
+export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${API_BASE_URL}/api/v1${endpoint}`;
+  console.log('🚀 Making API request to:', url);
+  console.log('🔧 API_BASE_URL:', API_BASE_URL);
   
   const defaultOptions: RequestInit = {
     headers: {
@@ -78,15 +85,18 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
 
   try {
     const response = await fetch(url, defaultOptions);
-    const data = await response.json();
+    console.log('📥 Response status:', response.status);
+    console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
-      throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     
+    const data = await response.json();
+    console.log('✅ API request successful:', data);
     return data;
   } catch (error) {
-    console.error('API request failed:', error);
+    console.error(`❌ API request failed for ${endpoint}:`, error);
     throw error;
   }
 };

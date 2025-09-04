@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore, apiRequest } from '../stores/authStore';
 
 import { 
   Search,
@@ -118,18 +118,15 @@ const Dashboard: React.FC = () => {
     try {
       if (!token) return;
       
-      const response = await fetch('/api/v1/onboarding/profile', {
+      // Use the exported apiRequest function
+      const data = await apiRequest('/onboarding/profile', {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
         },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data.profile) {
-          setUserProfile(data.data.profile);
-        }
+      if (data.success && data.data.profile) {
+        setUserProfile(data.data.profile);
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
