@@ -1,40 +1,36 @@
-# Python 3.13 Compatible Requirements
+# Python 3.13 Compatible Requirements for Render Deployment
 # Essential dependencies for AI Dietitian Agent System Backend
 
-# Core FastAPI dependencies
+# Core FastAPI dependencies (REQUIRED)
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.20
 python-dotenv>=1.0.1
 
-# Pydantic and validation
+# Pydantic and validation (REQUIRED)
 pydantic>=2.10.0
 pydantic-settings>=2.8.0
 pydantic[email]>=2.10.0
 email-validator>=2.0.0
 
-# HTTP client
+# HTTP client (REQUIRED)
 httpx>=0.28.0
 requests>=2.31.0
 
-# Authentication and security
+# Authentication and security (REQUIRED)
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
-# Database and real-time
+# Database (REQUIRED - but may cause websockets issues)
 supabase>=2.8.0
-websockets>=11.0,<13.0
-realtime>=1.0.0
 
-# AI and ML dependencies (actually used in code)
+# AI and ML dependencies (REQUIRED)
 openai>=1.60.0
-langgraph>=0.2.0
 
-# Development and testing tools (optional)
-pytest>=8.2.0
-black>=24.10.0
+# Production server (REQUIRED for deployment)
+gunicorn>=21.2.0
 
-# Additional utilities
+# Additional utilities (OPTIONAL - only if needed)
 python-dateutil>=2.8.2
 
 # Alternative packages for Python 3.13 compatibility
@@ -43,7 +39,6 @@ python-dateutil>=2.8.2
 # uvicorn[standard]>=0.24.0
 # pydantic>=2.5.0
 # openai>=1.3.0
-# langgraph>=0.0.20
 
 
 

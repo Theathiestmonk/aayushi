@@ -153,9 +153,6 @@ export const useAuthStore = create<AuthStore>()(
       register: async (email: string, password: string, userData: { full_name: string }) => {
         try {
           set({ isLoading: true, error: null });
-          
-          console.log('🔐 Auth store: Starting registration API call');
-          console.log('📝 Auth store: User data:', { email, userData });
 
           const response = await apiRequest('/auth/register', {
             method: 'POST',
@@ -166,20 +163,15 @@ export const useAuthStore = create<AuthStore>()(
             }),
           });
 
-          console.log('📡 Auth store: API response:', response);
-
           if (response.success) {
             set({ isLoading: false, error: null });
-            console.log('✅ Auth store: Registration successful, returning result');
             return { success: true, data: response.data };
           } else {
-            console.log('❌ Auth store: Registration failed:', response.error);
             set({ isLoading: false, error: response.error || 'Registration failed' });
             return { success: false, error: response.error || 'Registration failed' };
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Registration failed';
-          console.error('💥 Auth store: Registration error:', error);
           set({ isLoading: false, error: errorMessage });
           return { success: false, error: errorMessage };
         }

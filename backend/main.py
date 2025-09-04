@@ -14,14 +14,19 @@ from app.core.config import settings
 # Load environment variables
 load_dotenv()
 
-# Import API router
-try:
-    from app.api.v1.api import api_router
-    print("✅ API router imported successfully")
-except ImportError as e:
-    print(f"⚠️ Warning: Could not import API router: {e}")
-    print("🔧 Using fallback endpoints instead")
+# Import API router - Skip if websockets issues
+import os
+if os.getenv("SKIP_API_ROUTER", "false").lower() == "true":
+    print("🔧 Skipping API router import (SKIP_API_ROUTER=true)")
     api_router = None
+else:
+    try:
+        from app.api.v1.api import api_router
+        print("✅ API router imported successfully")
+    except ImportError as e:
+        print(f"⚠️ Warning: Could not import API router: {e}")
+        print("🔧 Using fallback endpoints instead")
+        api_router = None
 
 # Create a simple API router if the main one fails
 if api_router is None:
