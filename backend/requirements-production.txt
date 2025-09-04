@@ -1,16 +1,34 @@
-# Production requirements for deployment
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+# Production Requirements for AI Dietitian Agent System
+# Optimized for deployment platforms like Render, Heroku, etc.
+
+# Core FastAPI dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.20
+python-dotenv>=1.0.1
+
+# Pydantic and validation
+pydantic>=2.10.0
+pydantic-settings>=2.8.0
+pydantic[email]>=2.10.0
+email-validator>=2.0.0
+
+# HTTP client
+httpx>=0.28.0
+requests>=2.31.0
+
+# Authentication and security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-dotenv==1.0.0
-pydantic-settings==2.0.3
-supabase==2.0.2
-openai==1.3.0
-redis==5.0.1
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.23
-alembic==1.12.1
-httpx==0.25.2
-pydantic==2.5.0
+
+# Database - Use minimal Supabase without websockets issues
+supabase>=2.8.0
+
+# AI and ML dependencies
+openai>=1.60.0
+
+# Additional utilities
+python-dateutil>=2.8.2
+
+# Production monitoring
+gunicorn>=21.2.0

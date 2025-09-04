@@ -20,6 +20,7 @@ try:
     print("✅ API router imported successfully")
 except ImportError as e:
     print(f"⚠️ Warning: Could not import API router: {e}")
+    print("🔧 Using fallback endpoints instead")
     api_router = None
 
 # Create a simple API router if the main one fails
