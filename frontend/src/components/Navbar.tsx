@@ -1,13 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Bell, User, LogOut } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import LogoutConfirmation from './ui/LogoutConfirmation'
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate()
   const { logout, user } = useAuthStore()
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
-  const handleLogout = async () => {
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true)
+  }
+
+  const handleLogoutConfirm = async () => {
     try {
       await logout()
       navigate('/login')
@@ -16,6 +22,12 @@ const Navbar: React.FC = () => {
       // Still navigate to login even if logout fails
       navigate('/login')
     }
+    // Close the popup immediately after logout starts
+    setShowLogoutConfirm(false)
+  }
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirm(false)
   }
 
   return (
@@ -62,8 +74,8 @@ const Navbar: React.FC = () => {
               </button>
             </div>
             <button
-              onClick={handleLogout}
-              className="flex items-center space-x-2 text-gray-700 hover:text-red-600 p-2 rounded-md hover:bg-red-50"
+              onClick={handleLogoutClick}
+              className="flex items-center space-x-2 text-gray-700 hover:text-red-600 p-2 rounded-md hover:bg-red-50 transition-colors"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden md:block text-sm">Logout</span>
@@ -71,6 +83,13 @@ const Navbar: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Logout Confirmation Popup */}
+      <LogoutConfirmation
+        isOpen={showLogoutConfirm}
+        onClose={handleLogoutCancel}
+        onConfirm={handleLogoutConfirm}
+      />
     </nav>
   )
 }
