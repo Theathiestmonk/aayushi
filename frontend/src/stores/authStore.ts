@@ -123,8 +123,11 @@ export const useAuthStore = create<AuthStore>()(
             body: JSON.stringify({ email, password }),
           });
 
+          console.log('🔐 Login response received:', response);
+
           if (response.success && response.data) {
             const { user_id, email: userEmail, username, access_token, profile } = response.data;
+            console.log('🔐 Extracted data:', { user_id, userEmail, username, access_token, profile });
             
             const user: User = {
               id: user_id,
@@ -145,9 +148,12 @@ export const useAuthStore = create<AuthStore>()(
               onboardingCompleted: profile?.onboarding_completed || false,
             });
 
+            console.log('🔐 User state set:', { user, isAuthenticated: true, onboardingCompleted: profile?.onboarding_completed || false });
+
             // Store token in localStorage for persistence
             localStorage.setItem('auth_token', access_token);
             
+            console.log('🔐 Login successful, returning success');
             return { success: true };
           } else {
             set({ isLoading: false, error: response.error || 'Login failed' });
@@ -252,12 +258,15 @@ export const useAuthStore = create<AuthStore>()(
       checkAuth: async () => {
         try {
           const { token } = get();
+          console.log('🔍 checkAuth: token exists:', !!token);
           
           if (!token) {
+            console.log('🔍 checkAuth: No token, setting isAuthenticated to false');
             set({ isAuthenticated: false });
             return false;
           }
 
+          console.log('🔍 checkAuth: Checking token with /auth/me endpoint');
           const response = await apiRequest('/auth/me', {
             headers: {
               Authorization: `Bearer ${token}`,

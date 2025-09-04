@@ -36,17 +36,23 @@ const Login: React.FC = () => {
       setError(null);
       setSuccess(null);
 
+      console.log('🔐 Starting login process...');
       const result = await login(data.email, data.password);
+      console.log('🔐 Login result:', result);
 
       if (result.success) {
+        console.log('🔐 Login successful, setting success message and redirecting...');
         setSuccess('Login successful! Redirecting...');
         setTimeout(() => {
+          console.log('🔐 Navigating to dashboard...');
           navigate('/dashboard');
         }, 1000);
       } else {
+        console.log('🔐 Login failed:', result.error);
         setError(result.error || 'Login failed. Please try again.');
       }
     } catch (err) {
+      console.log('🔐 Login error:', err);
       setError('An unexpected error occurred. Please try again.');
       console.error('Login error:', err);
     }

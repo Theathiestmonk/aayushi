@@ -64,17 +64,23 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const { isAuthenticated, onboardingCompleted, checkOnboardingStatus } = useAuthStore();
 
+  console.log('🔍 App: isAuthenticated:', isAuthenticated, 'onboardingCompleted:', onboardingCompleted, 'isInitializing:', isInitializing);
+
   useEffect(() => {
     const initApp = async () => {
       try {
+        console.log('🔍 App: Initializing auth...');
         await initializeAuth();
+        console.log('🔍 App: Auth initialized, isAuthenticated:', isAuthenticated);
         // If authenticated, check onboarding status
         if (isAuthenticated) {
+          console.log('🔍 App: Checking onboarding status...');
           await checkOnboardingStatus();
         }
       } catch (error) {
         console.error('Failed to initialize authentication:', error);
       } finally {
+        console.log('🔍 App: Initialization complete');
         setIsInitializing(false);
       }
     };
