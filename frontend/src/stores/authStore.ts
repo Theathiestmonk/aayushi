@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { signInWithGoogle, handleAuthCallback, supabase } from '../lib/supabase';
+import { signInWithGoogle, handleAuthCallback, supabase } from '@/lib/supabase';
 
 // Types
 export interface User {
@@ -547,10 +547,10 @@ export const useAuthStore = create<AuthStore>()(
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data?.onboarding_completed) {
-              set({ onboardingCompleted: true });
-              return true;
-            } else {
-              set({ onboardingCompleted: false });
+            set({ onboardingCompleted: true });
+            return true;
+          } else {
+            set({ onboardingCompleted: false });
               return false;
             }
           } else {
@@ -602,7 +602,7 @@ export const useAuthStore = create<AuthStore>()(
 export const initializeAuth = async () => {
   try {
     console.log('🔄 initializeAuth: Starting auth initialization...');
-    const { checkAuth } = useAuthStore.getState();
+  const { checkAuth } = useAuthStore.getState();
     const isAuthenticated = await checkAuth();
     console.log('🔄 initializeAuth: Auth check result:', isAuthenticated);
     return isAuthenticated;
