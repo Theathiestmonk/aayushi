@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { signInWithGoogle, handleAuthCallback, supabase } from '@/lib/supabase';
+import { signInWithGoogle, handleAuthCallback, supabase } from '../lib/supabase';
 
 // Types
 export interface User {
