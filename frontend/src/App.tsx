@@ -10,6 +10,7 @@ import OnboardingCheck from '@/components/OnboardingCheck';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import EmailConfirmation from '@/pages/EmailConfirmation';
+import AuthCallback from '@/pages/AuthCallback';
 import Dashboard from '@/pages/Dashboard';
 import Onboarding from '@/pages/Onboarding';
 import DietPlans from '@/pages/DietPlans';
@@ -70,10 +71,11 @@ const App: React.FC = () => {
     const initApp = async () => {
       try {
         console.log('🔍 App: Initializing auth...');
-        await initializeAuth();
-        console.log('🔍 App: Auth initialized, isAuthenticated:', isAuthenticated);
+        const authResult = await initializeAuth();
+        console.log('🔍 App: Auth initialized, result:', authResult);
+        
         // If authenticated, check onboarding status
-        if (isAuthenticated) {
+        if (authResult) {
           console.log('🔍 App: Checking onboarding status...');
           await checkOnboardingStatus();
         }
@@ -86,7 +88,7 @@ const App: React.FC = () => {
     };
 
     initApp();
-  }, [isAuthenticated, checkOnboardingStatus]);
+  }, [checkOnboardingStatus]);
 
   if (isInitializing) {
     return (
@@ -158,6 +160,20 @@ const App: React.FC = () => {
                   <EmailConfirmation />
                 </motion.div>
               </PublicRoute>
+            }
+          />
+
+          <Route
+            path="/auth/callback"
+            element={
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <AuthCallback />
+              </motion.div>
             }
           />
 

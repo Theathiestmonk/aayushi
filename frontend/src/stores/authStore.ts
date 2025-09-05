@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { signInWithGoogle, handleAuthCallback, supabase } from '@/lib/supabase';
 
 // Types
 export interface User {
@@ -27,6 +28,11 @@ export interface AuthActions {
   register: (email: string, password: string, userData: { full_name: string }) => Promise<{ success: boolean; error?: string; data?: any }>;
   logout: () => Promise<void>;
   
+  // Google OAuth actions
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  registerWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  handleGoogleCallback: () => Promise<{ success: boolean; error?: string; user?: any }>;
+  
   // State management
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
@@ -39,6 +45,7 @@ export interface AuthActions {
   checkAuth: () => Promise<boolean>;
   refreshToken: () => Promise<boolean>;
   checkOnboardingStatus: () => Promise<boolean>;
+  resetAuthState: () => void;
 }
 
 export interface AuthStore extends AuthState, AuthActions {}
@@ -195,20 +202,18 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         try {
-          const { token } = get();
+          console.log('🔄 AuthStore: Logging out...');
           
-          if (token) {
-            // Call logout endpoint
-            await apiRequest('/auth/logout', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            });
+          // Sign out from Supabase
+          const { error } = await supabase.auth.signOut();
+          
+          if (error) {
+            console.error('❌ Supabase logout error:', error);
+          } else {
+            console.log('✅ Supabase logout successful');
           }
         } catch (error) {
-          console.error('Logout API call failed:', error);
-          // Continue with logout even if API call fails
+          console.error('💥 Logout failed:', error);
         } finally {
           // Clear local state
           set({
@@ -217,10 +222,184 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: false,
             isLoading: false,
             error: null,
+            onboardingCompleted: false,
           });
 
-          // Clear localStorage
-          localStorage.removeItem('auth_token');
+          // Clear all storage
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+      },
+
+      // Google OAuth methods
+      loginWithGoogle: async () => {
+        try {
+          console.log('🔄 AuthStore: Starting Google OAuth...');
+          
+          // Clear all existing state and storage
+          set({ 
+            user: null, 
+            token: null, 
+            isAuthenticated: false, 
+            isLoading: true, 
+            error: null 
+          });
+          
+          // Clear all storage
+          localStorage.clear();
+          sessionStorage.clear();
+          
+          const { error } = await signInWithGoogle();
+          
+          if (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Google sign-in failed';
+            set({ isLoading: false, error: errorMessage });
+            return { success: false, error: errorMessage };
+          }
+          
+          // The OAuth flow will redirect, so we don't need to set user state here
+          set({ isLoading: false, error: null });
+          return { success: true };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Google sign-in failed';
+          set({ isLoading: false, error: errorMessage });
+          return { success: false, error: errorMessage };
+        }
+      },
+
+      registerWithGoogle: async () => {
+        // For OAuth providers, sign-up and sign-in are the same
+        return get().loginWithGoogle();
+      },
+
+      handleGoogleCallback: async () => {
+        try {
+          console.log('🔄 AuthStore: Starting Google callback handling...');
+          
+          // Set loading state but don't clear existing data yet
+          set({ 
+            isLoading: true, 
+            error: null 
+          });
+          
+          const { success, session, user, error } = await handleAuthCallback();
+          
+          console.log('🔄 AuthStore: Callback result:', { success, user: user?.email, hasSession: !!session });
+          
+          if (success && user) {
+            // Send OAuth data to backend for proper account linking
+            console.log('🔄 AuthStore: Sending OAuth data to backend for account linking...');
+            
+            try {
+              const oauthData = {
+                supabase_user_id: user.id,
+                email: user.email || '',
+                full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+                avatar_url: user.user_metadata?.avatar_url || null,
+                provider: 'google'
+              };
+
+              console.log('🔄 AuthStore: OAuth data:', oauthData);
+
+              const response = await fetch('/api/v1/auth/google-oauth', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(oauthData),
+              });
+
+              console.log('🔄 AuthStore: Backend response status:', response.status);
+              
+              const result = await response.json();
+              console.log('🔄 AuthStore: Backend response data:', result);
+
+              if (result.success && result.data) {
+                const userData: User = {
+                  id: result.data.user_id,
+                  email: result.data.email,
+                  username: result.data.username,
+                  full_name: result.data.full_name,
+                  created_at: result.data.created_at,
+                  updated_at: result.data.updated_at,
+                  onboarding_completed: result.data.onboarding_completed,
+                };
+
+                console.log('✅ AuthStore: User data from backend (account linked):', userData);
+
+                set({
+                  user: userData,
+                  token: result.data.access_token,
+                  isAuthenticated: true,
+                  isLoading: false,
+                  error: null,
+                  onboardingCompleted: result.data.onboarding_completed,
+                });
+
+                // Store token in localStorage for persistence
+                localStorage.setItem('auth_token', result.data.access_token);
+                
+                return { success: true, user: userData };
+              } else {
+                console.error('❌ AuthStore: Backend OAuth failed:', result.error);
+                throw new Error(result.error || 'Backend authentication failed');
+              }
+            } catch (backendError) {
+              console.error('❌ AuthStore: Backend integration failed:', backendError);
+              console.log('🔄 AuthStore: Falling back to Supabase data...');
+              
+              // Fallback to Supabase data if backend fails
+              const userData: User = {
+                id: user.id,
+                email: user.email || '',
+                username: user.user_metadata?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '',
+                full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+                created_at: user.created_at,
+                updated_at: user.updated_at,
+                onboarding_completed: user.user_metadata?.onboarding_completed || false,
+              };
+
+              console.log('✅ AuthStore: Using Supabase fallback data:', userData);
+
+              set({
+                user: userData,
+                token: session?.access_token || null,
+                isAuthenticated: true,
+                isLoading: false,
+                error: null,
+                onboardingCompleted: user.user_metadata?.onboarding_completed || false,
+              });
+
+              // Store token in localStorage for persistence
+              if (session?.access_token) {
+                localStorage.setItem('auth_token', session.access_token);
+              }
+              
+              return { success: true, user: userData };
+            }
+          } else {
+            const errorMessage = typeof error === 'string' ? error : (error as unknown as Error)?.message || 'Authentication failed';
+            console.error('❌ AuthStore: Callback failed:', errorMessage);
+            set({ 
+              user: null, 
+              token: null, 
+              isAuthenticated: false, 
+              isLoading: false, 
+              error: errorMessage 
+            });
+            return { success: false, error: errorMessage };
+          }
+        } catch (error) {
+          const errorMessage = typeof error === 'string' ? error : (error as Error)?.message || 'Authentication callback failed';
+          console.error('💥 AuthStore: Callback error:', errorMessage);
+          set({ 
+            user: null, 
+            token: null, 
+            isAuthenticated: false, 
+            isLoading: false, 
+            error: errorMessage 
+          });
+          return { success: false, error: errorMessage };
         }
       },
 
@@ -257,6 +436,8 @@ export const useAuthStore = create<AuthStore>()(
       // Utility actions
       checkAuth: async () => {
         try {
+          console.log('🔍 checkAuth: Starting authentication check...');
+          
           const { token } = get();
           console.log('🔍 checkAuth: token exists:', !!token);
           
@@ -266,29 +447,40 @@ export const useAuthStore = create<AuthStore>()(
             return false;
           }
 
-          console.log('🔍 checkAuth: Checking token with /auth/me endpoint');
-          const response = await apiRequest('/auth/me', {
+          // Check with backend API to get proper user data
+          console.log('🔍 checkAuth: Checking with backend API...');
+          const response = await fetch('/api/v1/auth/me', {
             headers: {
-              Authorization: `Bearer ${token}`,
+              'Authorization': `Bearer ${token}`,
             },
           });
 
-          if (response.success && response.data) {
-            const profile = response.data;
+          if (!response.ok) {
+            console.error('❌ Backend auth check failed:', response.status);
+            set({ isAuthenticated: false, token: null });
+            localStorage.removeItem('auth_token');
+            return false;
+          }
+
+          const result = await response.json();
+          
+          if (result.success && result.data) {
             const user: User = {
-              id: profile.id,
-              email: profile.email,
-              username: profile.username || profile.email.split('@')[0],
-              full_name: profile.full_name,
-              created_at: profile.created_at,
-              updated_at: profile.updated_at,
-              onboarding_completed: profile.onboarding_completed || false,
+              id: result.data.id,
+              email: result.data.email,
+              username: result.data.username,
+              full_name: result.data.full_name,
+              created_at: result.data.created_at,
+              updated_at: result.data.updated_at,
+              onboarding_completed: result.data.onboarding_completed,
             };
+
+            console.log('✅ checkAuth: User found:', user.email);
 
             set({
               user,
               isAuthenticated: true,
-              onboardingCompleted: profile.onboarding_completed || false,
+              onboardingCompleted: result.data.onboarding_completed,
               error: null,
             });
 
@@ -299,38 +491,7 @@ export const useAuthStore = create<AuthStore>()(
             return false;
           }
         } catch (error) {
-          console.error('Auth check failed:', error);
-          
-          // Check if it's a 404 error (user profile not found)
-          if (error instanceof Error && error.message.includes('404')) {
-            // User is authenticated but hasn't completed onboarding
-            // Try to decode the token to get basic user info
-            try {
-              const { token } = get(); // Get token again in catch block
-              if (token) {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                const user: User = {
-                  id: payload.sub,
-                  email: payload.email,
-                  username: payload.email?.split('@')[0] || '',
-                  onboarding_completed: false,
-                };
-
-                set({
-                  user,
-                  isAuthenticated: true,
-                  onboardingCompleted: false,
-                  error: null,
-                });
-
-                return true;
-              }
-            } catch (decodeError) {
-              console.error('Failed to decode token:', decodeError);
-            }
-          }
-          
-          // For any other error, treat as authentication failure
+          console.error('💥 Auth check failed:', error);
           set({ isAuthenticated: false, token: null, error: null });
           localStorage.removeItem('auth_token');
           return false;
@@ -376,22 +537,44 @@ export const useAuthStore = create<AuthStore>()(
           if (!token) {
             return false;
           }
-                     const response = await apiRequest('/onboarding/status', {
+          
+          const response = await fetch('/api/v1/onboarding/status', {
             headers: {
-              Authorization: `Bearer ${token}`,
+              'Authorization': `Bearer ${token}`,
             },
           });
-          if (response.success && response.data?.onboarding_completed) {
-            set({ onboardingCompleted: true });
-            return true;
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data?.onboarding_completed) {
+              set({ onboardingCompleted: true });
+              return true;
+            } else {
+              set({ onboardingCompleted: false });
+              return false;
+            }
           } else {
-            set({ onboardingCompleted: false });
+            console.error('Onboarding status check failed:', response.status);
             return false;
           }
         } catch (error) {
           console.error('Onboarding status check failed:', error);
           return false;
         }
+      },
+
+      resetAuthState: () => {
+        console.log('🔄 AuthStore: Resetting authentication state...');
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+          onboardingCompleted: false,
+        });
+        localStorage.clear();
+        sessionStorage.clear();
       },
     }),
     {
@@ -417,6 +600,14 @@ export const useAuthStore = create<AuthStore>()(
 
 // Initialize auth state on app start
 export const initializeAuth = async () => {
-  const { checkAuth } = useAuthStore.getState();
-  await checkAuth();
+  try {
+    console.log('🔄 initializeAuth: Starting auth initialization...');
+    const { checkAuth } = useAuthStore.getState();
+    const isAuthenticated = await checkAuth();
+    console.log('🔄 initializeAuth: Auth check result:', isAuthenticated);
+    return isAuthenticated;
+  } catch (error) {
+    console.error('💥 initializeAuth failed:', error);
+    return false;
+  }
 };

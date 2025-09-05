@@ -32,6 +32,14 @@ class PasswordReset(BaseModel):
     """Password reset request model"""
     email: EmailStr = Field(..., description="User's email address")
 
+class GoogleOAuthRequest(BaseModel):
+    """Google OAuth request model"""
+    supabase_user_id: str = Field(..., description="Supabase user ID from OAuth")
+    email: EmailStr = Field(..., description="User's email from Google")
+    full_name: str = Field(..., description="User's full name from Google")
+    avatar_url: Optional[str] = Field(None, description="User's avatar URL from Google")
+    provider: str = Field(default="google", description="OAuth provider")
+
 class TokenResponse(BaseModel):
     """Authentication token response model"""
     access_token: str
@@ -386,5 +394,97 @@ async def test_supabase():
         return {
             "success": False,
             "error": f"Test failed: {str(e)}"
+        }
+
+@router.post("/google-oauth", response_model=AuthResponse)
+async def google_oauth_login(oauth_data: GoogleOAuthRequest):
+    """
+    Handle Google OAuth authentication
+    """
+    try:
+        logger.info(f"🔄 Processing Google OAuth for user: {oauth_data.email}")
+        
+        # Check if user already exists by email
+        existing_user = supabase_manager.client.table("users").select("*").eq("email", oauth_data.email).execute()
+        
+        if existing_user.data:
+            # User exists, update their OAuth info
+            logger.info(f"✅ User exists, updating OAuth info: {oauth_data.email}")
+            user_data = existing_user.data[0]
+            
+            # Update user with OAuth provider info
+            update_data = {
+                "supabase_user_id": oauth_data.supabase_user_id,
+                "provider": oauth_data.provider,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            if oauth_data.avatar_url:
+                update_data["avatar_url"] = oauth_data.avatar_url
+            
+            updated_user = supabase_manager.client.table("users").update(update_data).eq("id", user_data["id"]).execute()
+            
+            if updated_user.data:
+                user = updated_user.data[0]
+            else:
+                user = user_data
+        else:
+            # Create new user
+            logger.info(f"🆕 Creating new user from Google OAuth: {oauth_data.email}")
+            
+            new_user_data = {
+                "supabase_user_id": oauth_data.supabase_user_id,
+                "email": oauth_data.email,
+                "username": oauth_data.email.split('@')[0],
+                "full_name": oauth_data.full_name,
+                "provider": oauth_data.provider,
+                "onboarding_completed": False,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            if oauth_data.avatar_url:
+                new_user_data["avatar_url"] = oauth_data.avatar_url
+            
+            new_user = supabase_manager.client.table("users").insert(new_user_data).execute()
+            
+            if not new_user.data:
+                raise HTTPException(status_code=400, detail="Failed to create user")
+            
+            user = new_user.data[0]
+        
+        # Create access token
+        access_token = create_access_token(
+            data={"sub": str(user["id"]), "email": user["email"]}
+        )
+        
+        logger.info(f"✅ Google OAuth successful for user: {user['email']}")
+        
+        return {
+            "success": True,
+            "message": "Google OAuth authentication successful",
+            "data": {
+                "user_id": str(user["id"]),
+                "email": user["email"],
+                "username": user.get("username", user["email"].split('@')[0]),
+                "access_token": access_token,
+                "profile": {
+                    "id": str(user["id"]),
+                    "email": user["email"],
+                    "username": user.get("username", user["email"].split('@')[0]),
+                    "full_name": user.get("full_name", ""),
+                    "avatar_url": user.get("avatar_url"),
+                    "onboarding_completed": user.get("onboarding_completed", False),
+                    "created_at": user.get("created_at"),
+                    "updated_at": user.get("updated_at")
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Google OAuth failed: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Google OAuth authentication failed: {str(e)}"
         }
 
