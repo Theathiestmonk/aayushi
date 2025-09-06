@@ -301,7 +301,7 @@ export const useAuthStore = create<AuthStore>()(
 
               console.log('🔄 AuthStore: OAuth data:', oauthData);
 
-              const response = await fetch('/api/v1/auth/google-oauth', {
+              const response = await fetch(`${API_BASE_URL}/api/v1/auth/google-oauth`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -449,7 +449,7 @@ export const useAuthStore = create<AuthStore>()(
 
           // Check with backend API to get proper user data
           console.log('🔍 checkAuth: Checking with backend API...');
-          const response = await fetch('/api/v1/auth/me', {
+          const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -538,7 +538,7 @@ export const useAuthStore = create<AuthStore>()(
             return false;
           }
           
-          const response = await fetch('/api/v1/onboarding/status', {
+          const response = await fetch(`${API_BASE_URL}/api/v1/onboarding/status`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },

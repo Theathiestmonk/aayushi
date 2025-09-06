@@ -399,7 +399,12 @@ async def test_supabase():
 @router.post("/google-oauth", response_model=AuthResponse)
 async def google_oauth_login(oauth_data: GoogleOAuthRequest):
     """
-    Handle Google OAuth authentication
+    Handle Google OAuth authentication with account linking support.
+    
+    This endpoint properly handles the case where a user first registers with email/password
+    and then tries to authenticate with Google OAuth using the same email. Instead of creating
+    a new account, it links the OAuth provider to the existing account while preserving
+    the original Supabase user ID and all existing user data.
     """
     try:
         logger.info(f"🔄 Processing Google OAuth for user: {oauth_data.email}")
@@ -408,13 +413,13 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
         existing_user = supabase_manager.client.table("users").select("*").eq("email", oauth_data.email).execute()
         
         if existing_user.data:
-            # User exists, update their OAuth info
-            logger.info(f"✅ User exists, updating OAuth info: {oauth_data.email}")
+            # User exists, link OAuth account without changing supabase_user_id
+            logger.info(f"✅ User exists, linking OAuth account: {oauth_data.email}")
             user_data = existing_user.data[0]
             
-            # Update user with OAuth provider info
+            # Update user with OAuth provider info but keep original supabase_user_id
+            # This ensures the user can still access their existing data
             update_data = {
-                "supabase_user_id": oauth_data.supabase_user_id,
                 "provider": oauth_data.provider,
                 "updated_at": datetime.utcnow().isoformat()
             }
@@ -422,12 +427,19 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
             if oauth_data.avatar_url:
                 update_data["avatar_url"] = oauth_data.avatar_url
             
-            updated_user = supabase_manager.client.table("users").update(update_data).eq("id", user_data["id"]).execute()
-            
-            if updated_user.data:
-                user = updated_user.data[0]
+            # Only update if there are changes to make
+            if any(key in update_data for key in ["provider", "avatar_url"]):
+                updated_user = supabase_manager.client.table("users").update(update_data).eq("id", user_data["id"]).execute()
+                
+                if updated_user.data:
+                    user = updated_user.data[0]
+                else:
+                    user = user_data
             else:
                 user = user_data
+            
+            logger.info(f"✅ Account linked successfully for existing user: {oauth_data.email}")
+            logger.info(f"📋 User data preserved: ID={user['id']}, Original Supabase ID={user.get('supabase_user_id', 'N/A')}")
         else:
             # Create new user
             logger.info(f"🆕 Creating new user from Google OAuth: {oauth_data.email}")
