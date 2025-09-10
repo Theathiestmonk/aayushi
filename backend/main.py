@@ -217,6 +217,32 @@ async def api_test():
         "routes": [route.path for route in app.routes if hasattr(route, 'path')]
     }
 
+@app.get("/api/v1/test-supabase")
+async def test_supabase():
+    """Test Supabase connection"""
+    try:
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        # Test connection by trying to query user_profiles table
+        result = supabase_manager.client.table("user_profiles").select("id").limit(1).execute()
+        
+        return {
+            "success": True,
+            "message": "Supabase connection successful",
+            "data": {
+                "connection": "OK",
+                "table_access": "OK",
+                "sample_data": result.data[:1] if result.data else []
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Supabase connection failed: {str(e)}",
+            "error": str(e)
+        }
+
 # Add working authentication endpoints directly to the app
 @app.post("/api/v1/auth/login")
 async def login_endpoint(request_data: dict):
