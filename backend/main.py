@@ -672,30 +672,38 @@ async def get_onboarding_status(request: Request):
         supabase_manager = SupabaseManager()
         
         # Fetch user profile from database
-        profile_response = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
-        
-        if profile_response.data:
-            profile = profile_response.data[0]
-            onboarding_completed = profile.get("onboarding_completed", False)
-            print(f"✅ Onboarding status for user {user_id}: {onboarding_completed}")
+        try:
+            profile_response = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
             
-            return {
-                "success": True,
-                "message": "Onboarding status retrieved successfully",
-                "data": {
-                    "onboarding_completed": onboarding_completed,
-                    "profile": profile
+            if profile_response.data and len(profile_response.data) > 0:
+                profile = profile_response.data[0]
+                onboarding_completed = profile.get("onboarding_completed", False)
+                print(f"✅ Onboarding status for user {user_id}: {onboarding_completed}")
+                
+                return {
+                    "success": True,
+                    "message": "Onboarding status retrieved successfully",
+                    "data": {
+                        "onboarding_completed": onboarding_completed,
+                        "profile": profile
+                    }
                 }
-            }
-        else:
-            print(f"⚠️ No profile found for user {user_id}")
-            return {
-                "success": True,
-                "message": "No profile found - onboarding not completed",
-                "data": {
-                    "onboarding_completed": False,
-                    "profile": None
+            else:
+                print(f"⚠️ No profile found for user {user_id}")
+                return {
+                    "success": True,
+                    "message": "No profile found - onboarding not completed",
+                    "data": {
+                        "onboarding_completed": False,
+                        "profile": None
+                    }
                 }
+        except Exception as db_error:
+            print(f"❌ Database error: {db_error}")
+            return {
+                "success": False,
+                "message": f"Database error: {str(db_error)}",
+                "error": str(db_error)
             }
             
     except Exception as e:
