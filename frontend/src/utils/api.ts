@@ -15,7 +15,7 @@ const getApiBaseUrl = () => {
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'http://localhost:8000'; // Local development
   } else if (hostname.includes('vercel.app')) {
-    return 'https://aayushi-4swl.onrender.com'; // Production
+    return 'http://localhost:8000'; // Temporarily use local backend for testing
   } else {
     return 'http://localhost:8000'; // Default fallback
   }
