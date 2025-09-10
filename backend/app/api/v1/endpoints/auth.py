@@ -409,35 +409,9 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
     try:
         logger.info(f"🔄 Processing Google OAuth for user: {oauth_data.email}")
         
-        # Check if user already exists in auth.users by trying to create them
-        # If they already exist, Supabase will return an error
-        try:
-            # Try to create user in auth.users
-            auth_response = supabase_manager.client.auth.admin.create_user({
-                "email": oauth_data.email,
-                "user_metadata": {
-                    "full_name": oauth_data.full_name,
-                    "provider": oauth_data.provider,
-                    "avatar_url": oauth_data.avatar_url
-                }
-            })
-            
-            if not auth_response.user:
-                raise HTTPException(status_code=400, detail="Failed to create user in auth.users")
-            
-            # New user created successfully
-            logger.info(f"✅ New user created in auth.users: {oauth_data.email}")
-            user_id = auth_response.user.id
-            
-        except Exception as create_error:
-            # User already exists in auth.users
-            if "already been registered" in str(create_error) or "already exists" in str(create_error).lower():
-                logger.info(f"✅ User already exists in auth.users: {oauth_data.email}")
-                # Use the provided supabase_user_id since user exists
-                user_id = oauth_data.supabase_user_id
-            else:
-                logger.error(f"❌ Failed to create or find user: {str(create_error)}")
-                raise HTTPException(status_code=400, detail=f"Authentication failed: {str(create_error)}")
+        # Use the provided supabase_user_id directly (from frontend OAuth flow)
+        user_id = oauth_data.supabase_user_id
+        logger.info(f"✅ Using provided user ID: {user_id}")
         
         # Check if user has a profile in user_profiles (onboarding data)
         existing_profile = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
