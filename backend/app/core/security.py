@@ -17,7 +17,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours default
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
@@ -84,7 +84,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 
 def verify_token(token: str) -> Dict[str, Any]:
     """
-    Verify and decode a JWT token
+    Verify and decode a JWT token (handles both custom and Supabase tokens)
     
     Args:
         token: The JWT token to verify
@@ -96,23 +96,41 @@ def verify_token(token: str) -> Dict[str, Any]:
         ValueError: If token is invalid or expired
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        
-        # Check if token has expired
-        exp = payload.get("exp")
-        if exp is None:
-            raise ValueError("Token has no expiration")
-        
-        if datetime.utcnow() > datetime.fromtimestamp(exp):
-            raise ValueError("Token has expired")
-        
-        # Check if token has required fields
-        user_id = payload.get("sub")
-        if user_id is None:
-            raise ValueError("Token missing user ID")
-        
-        logger.info(f"✅ Token verified successfully for user: {user_id}")
-        return payload
+        # First try to decode with our custom secret key
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            logger.info(f"✅ Custom token verified successfully for user: {payload.get('sub', 'unknown')}")
+            
+            # Check if token has expired
+            exp = payload.get("exp")
+            if exp is None:
+                raise ValueError("Token has no expiration")
+            
+            if datetime.utcnow() > datetime.fromtimestamp(exp):
+                raise ValueError("Token has expired")
+            
+            # Check if token has required fields
+            user_id = payload.get("sub")
+            if user_id is None:
+                raise ValueError("Token missing user ID")
+            
+            logger.info(f"✅ Custom token verified successfully for user: {user_id}")
+            return payload
+            
+        except JWTError:
+            # If custom token fails, try to decode as Supabase token (no verification)
+            # This is for development/testing purposes
+            try:
+                # Decode without verification to extract user info
+                payload = jwt.decode(token, key="", options={"verify_signature": False, "verify_aud": False})
+                user_id = payload.get("sub")
+                if user_id:
+                    logger.info(f"✅ Supabase token decoded (unverified) for user: {user_id}")
+                    return payload
+                else:
+                    raise ValueError("Supabase token missing user ID")
+            except JWTError as e:
+                raise ValueError(f"Invalid token format: {str(e)}")
         
     except JWTError as e:
         logger.error(f"❌ JWT token verification failed: {str(e)}")

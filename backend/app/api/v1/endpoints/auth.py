@@ -409,61 +409,70 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
     try:
         logger.info(f"🔄 Processing Google OAuth for user: {oauth_data.email}")
         
-        # Check if user already exists by email
-        existing_user = supabase_manager.client.table("users").select("*").eq("email", oauth_data.email).execute()
-        
-        if existing_user.data:
-            # User exists, link OAuth account without changing supabase_user_id
-            logger.info(f"✅ User exists, linking OAuth account: {oauth_data.email}")
-            user_data = existing_user.data[0]
-            
-            # Update user with OAuth provider info but keep original supabase_user_id
-            # This ensures the user can still access their existing data
-            update_data = {
-                "provider": oauth_data.provider,
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            
-            if oauth_data.avatar_url:
-                update_data["avatar_url"] = oauth_data.avatar_url
-            
-            # Only update if there are changes to make
-            if any(key in update_data for key in ["provider", "avatar_url"]):
-                updated_user = supabase_manager.client.table("users").update(update_data).eq("id", user_data["id"]).execute()
-                
-                if updated_user.data:
-                    user = updated_user.data[0]
-                else:
-                    user = user_data
-            else:
-                user = user_data
-            
-            logger.info(f"✅ Account linked successfully for existing user: {oauth_data.email}")
-            logger.info(f"📋 User data preserved: ID={user['id']}, Original Supabase ID={user.get('supabase_user_id', 'N/A')}")
-        else:
-            # Create new user
-            logger.info(f"🆕 Creating new user from Google OAuth: {oauth_data.email}")
-            
-            new_user_data = {
-                "supabase_user_id": oauth_data.supabase_user_id,
+        # Check if user already exists in auth.users by trying to create them
+        # If they already exist, Supabase will return an error
+        try:
+            # Try to create user in auth.users
+            auth_response = supabase_manager.client.auth.admin.create_user({
                 "email": oauth_data.email,
-                "username": oauth_data.email.split('@')[0],
+                "user_metadata": {
+                    "full_name": oauth_data.full_name,
+                    "provider": oauth_data.provider,
+                    "avatar_url": oauth_data.avatar_url
+                }
+            })
+            
+            if not auth_response.user:
+                raise HTTPException(status_code=400, detail="Failed to create user in auth.users")
+            
+            # New user created successfully
+            logger.info(f"✅ New user created in auth.users: {oauth_data.email}")
+            user_id = auth_response.user.id
+            
+        except Exception as create_error:
+            # User already exists in auth.users
+            if "already been registered" in str(create_error) or "already exists" in str(create_error).lower():
+                logger.info(f"✅ User already exists in auth.users: {oauth_data.email}")
+                # Use the provided supabase_user_id since user exists
+                user_id = oauth_data.supabase_user_id
+            else:
+                logger.error(f"❌ Failed to create or find user: {str(create_error)}")
+                raise HTTPException(status_code=400, detail=f"Authentication failed: {str(create_error)}")
+        
+        # Check if user has a profile in user_profiles (onboarding data)
+        existing_profile = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+        
+        if existing_profile.data:
+            # User has onboarding data, just return existing profile
+            logger.info(f"✅ User has existing profile: {oauth_data.email}")
+            user = existing_profile.data[0]
+        else:
+            # User doesn't have onboarding data yet, create basic profile
+            logger.info(f"✅ Creating basic profile for user: {oauth_data.email}")
+            
+            profile_data = {
+                "id": user_id,
+                "email": oauth_data.email,
                 "full_name": oauth_data.full_name,
-                "provider": oauth_data.provider,
                 "onboarding_completed": False,
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat()
             }
             
-            if oauth_data.avatar_url:
-                new_user_data["avatar_url"] = oauth_data.avatar_url
+            profile_response = supabase_manager.client.table("user_profiles").insert(profile_data).execute()
             
-            new_user = supabase_manager.client.table("users").insert(new_user_data).execute()
-            
-            if not new_user.data:
-                raise HTTPException(status_code=400, detail="Failed to create user")
-            
-            user = new_user.data[0]
+            if profile_response.data:
+                user = profile_response.data[0]
+                logger.info(f"✅ Basic profile created: {oauth_data.email}")
+            else:
+                # Fallback to basic user data
+                user = {
+                    "id": user_id,
+                    "email": oauth_data.email,
+                    "full_name": oauth_data.full_name,
+                    "onboarding_completed": False
+                }
+                logger.warning(f"⚠️ Failed to create profile, using basic user data: {oauth_data.email}")
         
         # Create access token
         access_token = create_access_token(
@@ -479,6 +488,10 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
                 "user_id": str(user["id"]),
                 "email": user["email"],
                 "username": user.get("username", user["email"].split('@')[0]),
+                "full_name": user.get("full_name", ""),
+                "onboarding_completed": user.get("onboarding_completed", False),
+                "created_at": user.get("created_at"),
+                "updated_at": user.get("updated_at"),
                 "access_token": access_token,
                 "profile": {
                     "id": str(user["id"]),

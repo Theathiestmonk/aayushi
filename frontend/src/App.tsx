@@ -312,6 +312,7 @@ const App: React.FC = () => {
           />
         </Routes>
       </AnimatePresence>
+      
     </div>
   );
 };

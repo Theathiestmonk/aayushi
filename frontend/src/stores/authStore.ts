@@ -140,7 +140,7 @@ export const useAuthStore = create<AuthStore>()(
               id: user_id,
               email: userEmail,
               username: username || profile?.username || userEmail.split('@')[0],
-              full_name: profile?.full_name,
+              full_name: profile?.full_name || '',
               created_at: profile?.created_at,
               updated_at: profile?.updated_at,
               onboarding_completed: profile?.onboarding_completed || false,
@@ -236,33 +236,24 @@ export const useAuthStore = create<AuthStore>()(
         try {
           console.log('🔄 AuthStore: Starting Google OAuth...');
           
-          // Clear all existing state and storage
-          set({ 
-            user: null, 
-            token: null, 
-            isAuthenticated: false, 
-            isLoading: true, 
-            error: null 
-          });
-          
-          // Clear all storage
-          localStorage.clear();
-          sessionStorage.clear();
-          
+          // Start the OAuth process immediately without any state changes
           const { error } = await signInWithGoogle();
           
           if (error) {
             const errorMessage = error instanceof Error ? error.message : 'Google sign-in failed';
-            set({ isLoading: false, error: errorMessage });
+            set({ error: errorMessage });
             return { success: false, error: errorMessage };
           }
           
-          // The OAuth flow will redirect, so we don't need to set user state here
-          set({ isLoading: false, error: null });
+          // Clear storage only after successful OAuth initiation
+          localStorage.removeItem('auth-storage');
+          sessionStorage.clear();
+          
+          // Return success - let the component handle the redirect with success message
           return { success: true };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Google sign-in failed';
-          set({ isLoading: false, error: errorMessage });
+          set({ error: errorMessage });
           return { success: false, error: errorMessage };
         }
       },
@@ -319,7 +310,7 @@ export const useAuthStore = create<AuthStore>()(
                   id: result.data.user_id,
                   email: result.data.email,
                   username: result.data.username,
-                  full_name: result.data.full_name,
+                  full_name: result.data.full_name || '',
                   created_at: result.data.created_at,
                   updated_at: result.data.updated_at,
                   onboarding_completed: result.data.onboarding_completed,

@@ -9,6 +9,10 @@ const Navbar: React.FC = () => {
   const { logout, user } = useAuthStore()
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
+  // Debug user data
+  console.log('🔍 Navbar: User data:', user)
+  console.log('🔍 Navbar: Display name will be:', user?.full_name || user?.username || user?.email?.split('@')[0] || 'User')
+
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true)
   }
@@ -69,7 +73,7 @@ const Navbar: React.FC = () => {
               <button className="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
                 <User className="w-5 h-5" />
                 <span className="hidden md:block text-sm font-medium">
-                  {user?.username || user?.email || 'User'}
+                  {user?.full_name || user?.username || user?.email?.split('@')[0] || 'User'}
                 </span>
               </button>
             </div>

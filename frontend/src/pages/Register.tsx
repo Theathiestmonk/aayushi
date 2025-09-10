@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'; 
 import { useAuthStore } from '../stores/authStore';
 
 // Validation schema
@@ -40,7 +40,6 @@ const Register: React.FC = () => {
   const onSubmit = async (data: RegisterFormData) => {
     try {
       setError(null);
-      setSuccess(null);
 
       console.log('🚀 Starting registration for:', data.email);
       
@@ -87,22 +86,23 @@ const Register: React.FC = () => {
   const handleGoogleSignUp = async () => {
     try {
       setError(null);
-      setSuccess(null);
+      setSuccess('Redirecting to Google...');
       
-      // Completely reset authentication state before starting OAuth
-      const { resetAuthState } = useAuthStore.getState();
-      resetAuthState();
+      // Small delay to show the message
+      await new Promise(resolve => setTimeout(resolve, 500));
       
+      // Start OAuth - this will redirect to Google
       const result = await registerWithGoogle();
       
-      if (result.success) {
-        setSuccess('Redirecting to Google...');
-      } else {
+      if (!result.success) {
         setError(result.error || 'Google sign-up failed');
+        setSuccess(null);
       }
+      // If successful, browser redirects to Google
     } catch (err) {
       console.error('Google sign-up error:', err);
       setError('An unexpected error occurred with Google sign-up');
+      setSuccess(null);
     }
   };
 
@@ -151,6 +151,7 @@ const Register: React.FC = () => {
             </motion.div>
           )}
 
+          {/* Success Message */}
           {success && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
@@ -362,7 +363,7 @@ const Register: React.FC = () => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              {isLoading ? 'Connecting...' : 'Continue with Google'}
+              Continue with Google
             </button>
           </motion.div>
 

@@ -31,7 +31,10 @@ const stepSchemas = {
     contact_number: z.string().optional(),
     emergency_contact_name: z.string().optional(),
     emergency_contact_number: z.string().optional(),
-    occupation: z.enum(['student', 'professional', 'homemaker', 'retired', 'other'], { required_error: 'Please select your occupation' }),
+    occupation: z.enum(['student', 'professional', 'homemaker', 'retired', 'other'], { 
+      required_error: 'Please select your occupation',
+      invalid_type_error: 'Please select a valid occupation'
+    }),
     occupation_other: z.string().optional(),
   }),
   
@@ -397,23 +400,37 @@ const Onboarding: React.FC = () => {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const expirationTime = payload.exp * 1000;
       const currentTime = Date.now();
+      const timeUntilExpiry = expirationTime - currentTime;
       
-      if (expirationTime <= currentTime) {
-        console.log('🔄 Token expired, attempting to refresh...');
+      console.log('🔍 Token expiration check:', {
+        currentTime: new Date(currentTime).toISOString(),
+        expirationTime: new Date(expirationTime).toISOString(),
+        timeUntilExpiry: Math.round(timeUntilExpiry / 1000 / 60) + ' minutes'
+      });
+      
+      // Only refresh if token expires within 5 minutes or is already expired
+      if (timeUntilExpiry <= 5 * 60 * 1000) {
+        console.log('🔄 Token expires soon or is expired, attempting to refresh...');
         const refreshSuccess = await refreshToken();
         if (!refreshSuccess) {
-          alert('Your session has expired. Please log in again.');
-          navigate('/login');
-          setIsSubmitting(false);
-          return;
+          console.log('❌ Token refresh failed, checking if we can still proceed...');
+          // Don't immediately fail - try to submit anyway as the token might still be valid
+          console.log('⚠️ Proceeding with submission despite refresh failure...');
+        } else {
+          console.log('✅ Token refreshed successfully');
         }
-        console.log('✅ Token refreshed successfully');
+      } else {
+        console.log('✅ Token is still valid, proceeding with submission');
       }
     } catch (error) {
       console.error('❌ Failed to check token expiration:', error);
+      console.log('⚠️ Proceeding with submission despite token check failure...');
     }
 
     try {
+      // Debug: Log the form data before transformation
+      console.log('🔍 Form data before transformation:', data);
+      
       // Transform data for backend
       const onboardingData = {
         basic_info: {
@@ -498,7 +515,27 @@ const Onboarding: React.FC = () => {
       setOnboardingCompleted(true); // Update onboarding status in auth store
     } catch (error) {
       console.error('Onboarding submission failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to submit onboarding data. Please try again.';
+      
+      let errorMessage = 'Failed to submit onboarding data. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+          errorMessage = 'Your session has expired. Please log in again.';
+          // Clear auth state and redirect to login
+          const { resetAuthState } = useAuthStore.getState();
+          resetAuthState();
+          setTimeout(() => navigate('/login'), 2000);
+        } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+          errorMessage = 'You do not have permission to submit this form. Please log in again.';
+        } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+          errorMessage = 'Server error occurred. Please try again in a few moments.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       alert(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -822,12 +859,14 @@ const BasicInformationStep: React.FC<{
         <Controller
           name="occupation"
           control={control}
+          defaultValue=""
           render={({ field }) => (
             <select
               {...field}
+              value={field.value || ""}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="">Select occupation</option>
+              <option value="" disabled>Select occupation</option>
               <option value="student">Student</option>
               <option value="professional">Professional</option>
               <option value="homemaker">Homemaker</option>

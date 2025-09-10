@@ -2,7 +2,7 @@
 AI Dietitian Agent System - Main FastAPI Application
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
@@ -227,32 +227,55 @@ async def login_endpoint(request_data: dict):
     
     print(f"🔐 Login attempt: {email}")
     
-    # Simple authentication check
-    if email == "tiwariamit2503@gmail.com" and password == "Amit@25*03":
-        return {
-            "success": True,
-            "message": "Login successful",
-            "data": {
-                "user_id": "user-123",
-                "email": email,
-                "username": email.split('@')[0],
-                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImVtYWlsIjoiIiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.test-token",
-                "profile": {
-                    "id": "user-123",
+    try:
+        # Import Supabase manager
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        # Try to authenticate with Supabase
+        result = await supabase_manager.sign_in(email, password)
+        
+        if result["success"]:
+            user_id = result["user"].id
+            profile = result["profile"]
+            
+            # Create JWT token
+            from app.core.security import create_access_token
+            access_token = create_access_token(
+                data={"sub": user_id, "email": email}
+            )
+            
+            return {
+                "success": True,
+                "message": "Login successful",
+                "data": {
+                    "user_id": user_id,
                     "email": email,
-                    "username": email.split('@')[0],
-                    "full_name": "Amit Tiwari",
-                    "onboarding_completed": True,
-                    "created_at": "2024-01-01T00:00:00Z",
-                    "updated_at": "2024-01-01T00:00:00Z"
+                    "username": profile.get("username", email.split('@')[0]),
+                    "access_token": access_token,
+                    "profile": {
+                        "id": user_id,
+                        "email": email,
+                        "username": profile.get("username", email.split('@')[0]),
+                        "full_name": profile.get("full_name", ""),
+                        "onboarding_completed": profile.get("onboarding_completed", False),
+                        "created_at": profile.get("created_at"),
+                        "updated_at": profile.get("updated_at")
+                    }
                 }
             }
-        }
-    else:
+        else:
+            return {
+                "success": False,
+                "message": "Invalid email or password",
+                "error": "Invalid credentials"
+            }
+    except Exception as e:
+        print(f"❌ Login error: {str(e)}")
         return {
             "success": False,
-            "message": "Invalid email or password",
-            "error": "Invalid credentials"
+            "message": "Login failed",
+            "error": str(e)
         }
 
 @app.get("/api/v1/auth/me")
@@ -284,31 +307,166 @@ async def logout_endpoint():
         }
     }
 
-# Add onboarding endpoints
-@app.get("/api/v1/onboarding/status")
-async def get_onboarding_status():
-    """Get onboarding status"""
-    return {
-        "success": True,
-        "message": "Onboarding status retrieved",
-        "data": {
-            "onboarding_completed": True,
-            "current_step": "completed",
-            "steps_completed": 5,
-            "total_steps": 5
+# Onboarding endpoints are handled by the onboarding router in app/api/v1/endpoints/onboarding.py
+# Temporary fix: Add submit endpoint directly until router is properly loaded
+@app.post("/api/v1/onboarding/submit")
+async def submit_onboarding_temp(request: Request):
+    """Temporary onboarding submit endpoint with database storage"""
+    try:
+        # Get the request body
+        body = await request.json()
+        print(f"🔍 Received onboarding data: {body}")
+        
+        # Extract user info from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {
+                "success": False,
+                "message": "Authorization header missing or invalid",
+                "error": "Missing or invalid authorization"
+            }
+        
+        token = auth_header.split(" ")[1]
+        print(f"🔑 Token received: {token[:20]}...")
+        
+        # Import Supabase manager
+        try:
+            from app.core.supabase import SupabaseManager
+            supabase_manager = SupabaseManager()
+        except Exception as import_error:
+            print(f"❌ Failed to import SupabaseManager: {import_error}")
+            return {
+                "success": False,
+                "message": f"Database connection failed: {str(import_error)}",
+                "error": str(import_error)
+            }
+        
+        # Decode JWT token to get user ID
+        try:
+            from app.core.security import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("sub")
+            print(f"🔍 JWT payload: {payload}")
+            print(f"🔑 Extracted user ID: {user_id}")
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "message": "Invalid token - no user ID found",
+                    "error": "Invalid token"
+                }
+            print(f"✅ Using user ID: {user_id}")
+        except Exception as token_error:
+            print(f"❌ Token verification failed: {token_error}")
+            return {
+                "success": False,
+                "message": f"Token verification failed: {str(token_error)}",
+                "error": str(token_error)
+            }
+        
+        # Transform the onboarding data to match the database schema
+        profile_data = {
+            "id": user_id,
+            "full_name": body.get("basic_info", {}).get("full_name", ""),
+            "age": body.get("basic_info", {}).get("age"),
+            "gender": body.get("basic_info", {}).get("gender"),
+            "height_cm": body.get("basic_info", {}).get("height_cm"),
+            "weight_kg": body.get("basic_info", {}).get("weight_kg"),
+            "contact_number": body.get("basic_info", {}).get("contact_number"),
+            "email": body.get("basic_info", {}).get("email", ""),
+            "emergency_contact_name": body.get("basic_info", {}).get("emergency_contact_name"),
+            "emergency_contact_number": body.get("basic_info", {}).get("emergency_contact_number"),
+            "occupation": body.get("basic_info", {}).get("occupation"),
+            "occupation_other": body.get("basic_info", {}).get("occupation_other"),
+            "medical_conditions": body.get("medical_history", {}).get("medical_conditions", []),
+            "medications_supplements": body.get("medical_history", {}).get("medications_supplements", []),
+            "surgeries_hospitalizations": body.get("medical_history", {}).get("surgeries_hospitalizations"),
+            "food_allergies": body.get("medical_history", {}).get("food_allergies", []),
+            "family_history": body.get("medical_history", {}).get("family_history", []),
+            "daily_routine": body.get("lifestyle_habits", {}).get("daily_routine"),
+            "sleep_hours": body.get("lifestyle_habits", {}).get("sleep_hours"),
+            "alcohol_consumption": body.get("lifestyle_habits", {}).get("alcohol_consumption", False),
+            "alcohol_frequency": body.get("lifestyle_habits", {}).get("alcohol_frequency"),
+            "smoking": body.get("lifestyle_habits", {}).get("smoking", False),
+            "stress_level": body.get("lifestyle_habits", {}).get("stress_level"),
+            "physical_activity_type": body.get("lifestyle_habits", {}).get("physical_activity_type"),
+            "physical_activity_frequency": body.get("lifestyle_habits", {}).get("physical_activity_frequency"),
+            "physical_activity_duration": body.get("lifestyle_habits", {}).get("physical_activity_duration"),
+            "breakfast_habits": body.get("eating_habits", {}).get("breakfast_habits"),
+            "lunch_habits": body.get("eating_habits", {}).get("lunch_habits"),
+            "dinner_habits": body.get("eating_habits", {}).get("dinner_habits"),
+            "snacks_habits": body.get("eating_habits", {}).get("snacks_habits"),
+            "beverages_habits": body.get("eating_habits", {}).get("beverages_habits"),
+            "meal_timings": body.get("eating_habits", {}).get("meal_timings"),
+            "food_preference": body.get("eating_habits", {}).get("food_preference"),
+            "cultural_restrictions": body.get("eating_habits", {}).get("cultural_restrictions"),
+            "eating_out_frequency": body.get("eating_habits", {}).get("eating_out_frequency"),
+            "daily_water_intake": body.get("eating_habits", {}).get("daily_water_intake"),
+            "common_cravings": body.get("eating_habits", {}).get("common_cravings", []),
+            "primary_goals": body.get("goals_expectations", {}).get("primary_goals", []),
+            "specific_health_concerns": body.get("goals_expectations", {}).get("specific_health_concerns"),
+            "past_diets": body.get("goals_expectations", {}).get("past_diets"),
+            "progress_pace": body.get("goals_expectations", {}).get("progress_pace"),
+            "current_weight_kg": body.get("measurements_tracking", {}).get("current_weight_kg"),
+            "waist_circumference_cm": body.get("measurements_tracking", {}).get("waist_circumference_cm"),
+            "bmi": body.get("measurements_tracking", {}).get("bmi"),
+            "weight_trend": body.get("measurements_tracking", {}).get("weight_trend"),
+            "blood_reports": body.get("measurements_tracking", {}).get("blood_reports", []),
+            "loved_foods": body.get("personalization_motivation", {}).get("loved_foods"),
+            "disliked_foods": body.get("personalization_motivation", {}).get("disliked_foods"),
+            "cooking_facilities": body.get("personalization_motivation", {}).get("cooking_facilities", []),
+            "who_cooks": body.get("personalization_motivation", {}).get("who_cooks"),
+            "budget_flexibility": body.get("personalization_motivation", {}).get("budget_flexibility"),
+            "motivation_level": body.get("personalization_motivation", {}).get("motivation_level"),
+            "support_system": body.get("personalization_motivation", {}).get("support_system"),
+            "onboarding_completed": True
         }
-    }
-
-@app.post("/api/v1/onboarding/complete")
-async def complete_onboarding():
-    """Complete onboarding"""
-    return {
-        "success": True,
-        "message": "Onboarding completed successfully",
-        "data": {
-            "onboarding_completed": True,
-            "redirect_to": "dashboard"
+        
+        print(f"🔍 Transformed profile data: {profile_data}")
+        
+        # Store the data in the database
+        try:
+            # First check if profile already exists
+            existing_profile = supabase_manager.client.table("user_profiles").select("id").eq("id", user_id).execute()
+            
+            if existing_profile.data and len(existing_profile.data) > 0:
+                # Update existing profile
+                print(f"🔄 Updating existing profile for user: {user_id}")
+                result = supabase_manager.client.table("user_profiles").update(profile_data).eq("id", user_id).execute()
+            else:
+                # Insert new profile
+                print(f"🆕 Creating new profile for user: {user_id}")
+                result = supabase_manager.client.table("user_profiles").insert(profile_data).execute()
+            
+            print(f"✅ Profile data stored successfully: {result}")
+            
+            if not result.data:
+                raise Exception("No data returned from database operation")
+                
+        except Exception as db_error:
+            print(f"❌ Database error: {db_error}")
+            return {
+                "success": False,
+                "message": f"Failed to store profile data: {str(db_error)}",
+                "error": str(db_error)
+            }
+        
+        return {
+            "success": True,
+            "message": "Onboarding submitted successfully and profile created!",
+            "data": {
+                "onboarding_completed": True,
+                "redirect_to": "dashboard",
+                "user_id": user_id,
+                "profile_updated_at": "2024-01-01T00:00:00Z"
+            }
         }
+    except Exception as e:
+        print(f"❌ Error in temporary onboarding endpoint: {e}")
+        return {
+            "success": False,
+            "message": f"Onboarding submission failed: {str(e)}",
+            "error": str(e)
     }
 
 # Add dashboard data endpoints
@@ -473,199 +631,228 @@ async def get_my_diet_plans():
         }
     }
 
-# Add onboarding profile endpoint
-@app.get("/api/v1/onboarding/profile")
-async def get_onboarding_profile():
-    """Get onboarding profile data"""
-    return {
-        "success": True,
-        "message": "Onboarding profile retrieved",
-        "data": {
-            "profile": {
-                "id": "user-123",
-                "full_name": "Amit Tiwari",
-                "age": 28,
-                "gender": "male",
-                "height_cm": 175.0,
-                "weight_kg": 70.0,
-                "contact_number": "+91-9876543210",
-                "email": "tiwariamit2503@gmail.com",
-                "emergency_contact_name": "Priya Tiwari",
-                "emergency_contact_number": "+91-9876543211",
-                "occupation": "professional",
-                "occupation_other": None,
-                "medical_conditions": [],
-                "medications_supplements": [],
-                "surgeries_hospitalizations": None,
-                "food_allergies": [],
-                "family_history": [],
-                "daily_routine": "moderately_active",
-                "sleep_hours": "7-8",
-                "alcohol_consumption": False,
-                "alcohol_frequency": None,
-                "smoking": False,
-                "stress_level": "moderate",
-                "physical_activity_type": "gym",
-                "physical_activity_frequency": "3-4 times per week",
-                "physical_activity_duration": "45-60 minutes",
-                "breakfast_habits": "Regular",
-                "lunch_habits": "Office lunch",
-                "dinner_habits": "Home cooked",
-                "snacks_habits": "Fruits and nuts",
-                "beverages_habits": "Water and green tea",
-                "meal_timings": "regular",
-                "food_preference": "non_vegetarian",
-                "cultural_restrictions": None,
-                "eating_out_frequency": "weekly",
-                "daily_water_intake": "2-3L",
-                "common_cravings": ["sweets", "chocolate"],
-                "primary_goals": ["weight_loss", "muscle_gain"],
-                "specific_health_concerns": "Lower back pain",
-                "past_diets": "Keto diet for 3 months",
-                "progress_pace": "moderate",
-                "current_weight_kg": 70.0,
-                "waist_circumference_cm": 85.0,
-                "bmi": 22.9,
-                "weight_trend": "stable",
-                "blood_reports": [],
-                "loved_foods": "Indian curries, grilled chicken",
-                "disliked_foods": "Raw vegetables, bitter gourd",
-                "cooking_facilities": ["gas_stove", "microwave", "oven"],
-                "who_cooks": "self",
-                "budget_flexibility": "flexible",
-                "motivation_level": 8,
-                "support_system": "strong",
-                "onboarding_completed": True,
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z",
-                "data_encryption_level": "standard",
-                "last_data_access": "2024-09-04T12:00:00Z",
-                "data_access_log": []
-            }
-        }
-    }
-
-# Add Google OAuth endpoint
-@app.post("/api/v1/auth/google-oauth")
-async def google_oauth_endpoint(oauth_data: dict):
-    """Handle Google OAuth authentication and account linking"""
+# Add onboarding status endpoint
+@app.get("/api/v1/onboarding/status")
+async def get_onboarding_status(request: Request):
+    """Get onboarding completion status from database"""
     try:
-        print(f"🔄 Processing Google OAuth for user: {oauth_data.get('email', 'unknown')}")
+        # Extract user info from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {
+                "success": False,
+                "message": "Authorization header missing or invalid",
+                "error": "Missing or invalid authorization"
+            }
         
-        # For now, return a simple response that matches the expected format
-        # In a real implementation, this would check the database for existing users
-        email = oauth_data.get('email', '')
-        full_name = oauth_data.get('full_name', '')
+        token = auth_header.split(" ")[1]
         
-        # Check if this is the existing user (tiwariamit2503@gmail.com)
-        if email == "tiwariamit2503@gmail.com":
-            print("✅ Found existing user, linking Google OAuth account")
+        # Decode JWT token to get user ID
+        try:
+            from app.core.security import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("sub")
+            if not user_id:
+                return {
+                    "success": False,
+                    "message": "Invalid token - no user ID found",
+                    "error": "Invalid token"
+                }
+            print(f"🔑 Onboarding status - Decoded user ID: {user_id}")
+        except Exception as token_error:
+            print(f"❌ Onboarding status - Token verification failed: {token_error}")
+            return {
+                "success": False,
+                "message": f"Token verification failed: {str(token_error)}",
+                "error": str(token_error)
+            }
+        
+        # Import Supabase manager
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        # Fetch user profile from database
+        profile_response = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+        
+        if profile_response.data:
+            profile = profile_response.data[0]
+            onboarding_completed = profile.get("onboarding_completed", False)
+            print(f"✅ Onboarding status for user {user_id}: {onboarding_completed}")
+            
             return {
                 "success": True,
-                "message": "Account linked successfully",
+                "message": "Onboarding status retrieved successfully",
                 "data": {
-                    "user_id": "user-123",
-                    "email": email,
-                    "username": email.split('@')[0],
-                    "full_name": "Amit Tiwari",  # Keep existing name
-                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImVtYWlsIjoiIiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.test-token",
-                    "onboarding_completed": True,  # Keep existing onboarding status
-                    "created_at": "2024-01-01T00:00:00Z",
-                    "updated_at": "2024-01-01T00:00:00Z"
+                    "onboarding_completed": onboarding_completed,
+                    "profile": profile
                 }
             }
         else:
-            print(f"🆕 Creating new user from Google OAuth: {email}")
+            print(f"⚠️ No profile found for user {user_id}")
             return {
                 "success": True,
-                "message": "New account created",
+                "message": "No profile found - onboarding not completed",
                 "data": {
-                    "user_id": f"user-{email.split('@')[0]}",
-                    "email": email,
-                    "username": email.split('@')[0],
-                    "full_name": full_name,
-                    "access_token": f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImVtYWlsIjoiIiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.test-token-{email.split('@')[0]}",
-                    "onboarding_completed": False,  # New users need onboarding
-                    "created_at": "2024-01-01T00:00:00Z",
-                    "updated_at": "2024-01-01T00:00:00Z"
+                    "onboarding_completed": False,
+                    "profile": None
                 }
             }
+            
     except Exception as e:
-        print(f"❌ Google OAuth error: {e}")
+        print(f"❌ Onboarding status error: {str(e)}")
         return {
             "success": False,
-            "message": "Google OAuth failed",
+            "message": f"Failed to get onboarding status: {str(e)}",
             "error": str(e)
         }
 
+# Add onboarding profile endpoint
+@app.get("/api/v1/onboarding/profile")
+async def get_onboarding_profile(request: Request):
+    """Get onboarding profile data from database"""
+    try:
+        # Extract user info from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {
+                "success": False,
+                "message": "Authorization header missing or invalid",
+                "error": "Missing or invalid authorization"
+            }
+        
+        token = auth_header.split(" ")[1]
+        
+        # Decode JWT token to get user ID
+        try:
+            from app.core.security import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("sub")
+            if not user_id:
+                return {
+                    "success": False,
+                    "message": "Invalid token - no user ID found",
+                    "error": "Invalid token"
+                }
+            print(f"🔑 Onboarding profile - Decoded user ID: {user_id}")
+        except Exception as token_error:
+            print(f"❌ Onboarding profile - Token verification failed: {token_error}")
+            return {
+                "success": False,
+                "message": f"Token verification failed: {str(token_error)}",
+                "error": str(token_error)
+            }
+        
+        # Import Supabase manager
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        # Fetch user profile from database
+        try:
+            result = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+            print(f"🔍 Onboarding profile - Database query result: {result}")
+            
+            if result.data and len(result.data) > 0:
+                profile_data = result.data[0]
+                print(f"✅ Onboarding profile - Found profile data: {profile_data.get('full_name', 'Unknown')}")
+                return {
+                    "success": True,
+                    "message": "Onboarding profile retrieved successfully",
+                    "data": {
+                        "profile": profile_data
+                    }
+                }
+            else:
+                print(f"⚠️ Onboarding profile - No profile found for user ID: {user_id}")
+                return {
+                    "success": False,
+                    "message": "Profile not found",
+                    "error": "No profile data found for this user"
+                }
+        except Exception as db_error:
+            print(f"❌ Onboarding profile - Database error: {db_error}")
+            return {
+                "success": False,
+                "message": f"Database error: {str(db_error)}",
+                "error": str(db_error)
+            }
+            
+    except Exception as e:
+        print(f"❌ Onboarding profile - General error: {e}")
+        return {
+            "success": False,
+            "message": f"Profile retrieval failed: {str(e)}",
+            "error": str(e)
+        }
+
+# Google OAuth endpoint is now handled by the proper auth router in app/api/v1/endpoints/auth.py
+
 # Add profile endpoint (what the frontend is actually calling)
 @app.get("/api/v1/profile")
-async def get_profile():
-    """Get user profile data matching database schema"""
-    return {
-        "success": True,
-        "message": "Profile retrieved successfully",
-        "data": {
-            "id": "user-123",
-            "full_name": "Amit Tiwari",
-            "age": 28,
-            "gender": "male",
-            "height_cm": 175.0,
-            "weight_kg": 70.0,
-            "contact_number": "+91-9876543210",
-            "email": "tiwariamit2503@gmail.com",
-            "emergency_contact_name": "Priya Tiwari",
-            "emergency_contact_number": "+91-9876543211",
-            "occupation": "professional",
-            "occupation_other": None,
-            "medical_conditions": [],
-            "medications_supplements": [],
-            "surgeries_hospitalizations": None,
-            "food_allergies": [],
-            "family_history": [],
-            "daily_routine": "moderately_active",
-            "sleep_hours": "7-8",
-            "alcohol_consumption": False,
-            "alcohol_frequency": None,
-            "smoking": False,
-            "stress_level": "moderate",
-            "physical_activity_type": "gym",
-            "physical_activity_frequency": "3-4 times per week",
-            "physical_activity_duration": "45-60 minutes",
-            "breakfast_habits": "Regular",
-            "lunch_habits": "Office lunch",
-            "dinner_habits": "Home cooked",
-            "snacks_habits": "Fruits and nuts",
-            "beverages_habits": "Water and green tea",
-            "meal_timings": "regular",
-            "food_preference": "non_vegetarian",
-            "cultural_restrictions": None,
-            "eating_out_frequency": "weekly",
-            "daily_water_intake": "2-3L",
-            "common_cravings": ["sweets", "chocolate"],
-            "primary_goals": ["weight_loss", "muscle_gain"],
-            "specific_health_concerns": "Lower back pain",
-            "past_diets": "Keto diet for 3 months",
-            "progress_pace": "moderate",
-            "current_weight_kg": 70.0,
-            "waist_circumference_cm": 85.0,
-            "bmi": 22.9,
-            "weight_trend": "stable",
-            "blood_reports": [],
-            "loved_foods": "Indian curries, grilled chicken",
-            "disliked_foods": "Raw vegetables, bitter gourd",
-            "cooking_facilities": ["gas_stove", "microwave", "oven"],
-            "who_cooks": "self",
-            "budget_flexibility": "flexible",
-            "motivation_level": 8,
-            "support_system": "strong",
-            "onboarding_completed": True,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z",
-            "data_encryption_level": "standard",
-            "last_data_access": "2024-09-04T12:00:00Z",
-            "data_access_log": []
-        }
+async def get_profile(request: Request):
+    """Get user profile data from database"""
+    try:
+        # Extract user info from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {
+                "success": False,
+                "message": "Authorization header missing or invalid",
+                "error": "Missing or invalid authorization"
+            }
+        
+        token = auth_header.split(" ")[1]
+        
+        # Decode JWT token to get user ID
+        try:
+            from app.core.security import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("sub")
+            if not user_id:
+                return {
+                    "success": False,
+                    "message": "Invalid token - no user ID found",
+                    "error": "Invalid token"
+                }
+        except Exception as token_error:
+            return {
+                "success": False,
+                "message": f"Token verification failed: {str(token_error)}",
+                "error": str(token_error)
+            }
+        
+        # Import Supabase manager
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        # Fetch user profile from database
+        try:
+            result = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+            
+            if result.data and len(result.data) > 0:
+                profile_data = result.data[0]
+                return {
+                    "success": True,
+                    "message": "Profile retrieved successfully",
+                    "data": profile_data
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Profile not found",
+                    "error": "No profile data found for this user"
+                }
+        except Exception as db_error:
+            return {
+                "success": False,
+                "message": f"Database error: {str(db_error)}",
+                "error": str(db_error)
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Profile retrieval failed: {str(e)}",
+            "error": str(e)
     }
 
 # Always include API router (either the main one or the fallback)

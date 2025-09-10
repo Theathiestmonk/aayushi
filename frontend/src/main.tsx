@@ -16,8 +16,12 @@ const queryClient = new QueryClient({
   },
 })
 
+// Temporarily disable StrictMode to prevent double rendering of modals
+// In production, you can re-enable StrictMode for better error detection
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  isDevelopment ? (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
@@ -47,7 +51,39 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         />
       </BrowserRouter>
     </QueryClientProvider>
-  </React.StrictMode>,
+  ) : (
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#363636',
+                color: '#fff',
+              },
+              success: {
+                duration: 3000,
+                iconTheme: {
+                  primary: '#22c55e',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                duration: 5000,
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: '#fff',
+                },
+              },
+            }}
+          />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>
+  )
 )
 
 
