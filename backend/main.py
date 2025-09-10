@@ -272,30 +272,30 @@ async def login_endpoint(request_data: dict):
                 data={"sub": user_id, "email": email}
             )
             
-        return {
-            "success": True,
-            "message": "Login successful",
-            "data": {
-                    "user_id": user_id,
-                    "email": email,
-                    "username": profile.get("username", email.split('@')[0]),
-                    "access_token": access_token,
-                    "profile": {
-                        "id": user_id,
+            return {
+                "success": True,
+                "message": "Login successful",
+                "data": {
+                        "user_id": user_id,
                         "email": email,
                         "username": profile.get("username", email.split('@')[0]),
-                        "full_name": profile.get("full_name", ""),
-                        "onboarding_completed": profile.get("onboarding_completed", False),
-                        "created_at": profile.get("created_at"),
-                        "updated_at": profile.get("updated_at")
-                    }
+                        "access_token": access_token,
+                        "profile": {
+                            "id": user_id,
+                            "email": email,
+                            "username": profile.get("username", email.split('@')[0]),
+                            "full_name": profile.get("full_name", ""),
+                            "onboarding_completed": profile.get("onboarding_completed", False),
+                            "created_at": profile.get("created_at"),
+                            "updated_at": profile.get("updated_at")
+                        }
+                }
             }
-        }
-    else:
-        return {
-            "success": False,
-            "message": "Invalid email or password",
-            "error": "Invalid credentials"
+        else:
+            return {
+                "success": False,
+                "message": "Invalid email or password",
+                "error": "Invalid credentials"
             }
     except Exception as e:
         print(f"❌ Login error: {str(e)}")
