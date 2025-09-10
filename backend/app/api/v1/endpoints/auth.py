@@ -480,6 +480,8 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
         )
         
         logger.info(f"✅ Google OAuth successful for user: {user['email']}")
+        logger.info(f"🔍 User data structure: {user}")
+        logger.info(f"🔍 Onboarding completed value: {user.get('onboarding_completed', 'NOT_FOUND')}")
         
         return {
             "success": True,
