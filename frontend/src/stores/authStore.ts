@@ -327,6 +327,8 @@ export const useAuthStore = create<AuthStore>()(
                   onboardingCompleted: result.data.onboarding_completed,
                 });
 
+                console.log('✅ AuthStore: Google OAuth - onboardingCompleted set to:', result.data.onboarding_completed);
+
                 // Store token in localStorage for persistence
                 localStorage.setItem('auth_token', result.data.access_token);
                 
@@ -574,6 +576,7 @@ export const useAuthStore = create<AuthStore>()(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        onboardingCompleted: state.onboardingCompleted,
       }),
       onRehydrateStorage: () => (state) => {
         // Restore token from localStorage if not in state

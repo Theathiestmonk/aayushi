@@ -66,6 +66,7 @@ const App: React.FC = () => {
   const { isAuthenticated, onboardingCompleted, checkOnboardingStatus } = useAuthStore();
 
   console.log('🔍 App: isAuthenticated:', isAuthenticated, 'onboardingCompleted:', onboardingCompleted, 'isInitializing:', isInitializing);
+  console.log('🔍 App: User data:', useAuthStore.getState().user);
 
   useEffect(() => {
     const initApp = async () => {
@@ -77,7 +78,16 @@ const App: React.FC = () => {
         // If authenticated, check onboarding status
         if (authResult) {
           console.log('🔍 App: Checking onboarding status...');
-          await checkOnboardingStatus();
+          
+          // First check if user data already has onboarding_completed
+          const { user } = useAuthStore.getState();
+          if (user?.onboarding_completed !== undefined) {
+            console.log('🔍 App: User data has onboarding_completed:', user.onboarding_completed);
+            useAuthStore.setState({ onboardingCompleted: user.onboarding_completed });
+          } else {
+            console.log('🔍 App: Fetching onboarding status from API...');
+            await checkOnboardingStatus();
+          }
         }
       } catch (error) {
         console.error('Failed to initialize authentication:', error);
