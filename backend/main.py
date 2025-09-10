@@ -79,7 +79,7 @@ if api_router is None:
                         "id": "user-123",
                         "email": email,
                         "username": email.split('@')[0],
-                        "full_name": "Amit Tiwari",
+                        "full_name": profile.get("full_name", ""),
                         "onboarding_completed": True,
                         "created_at": "2024-01-01T00:00:00Z",
                         "updated_at": "2024-01-01T00:00:00Z"
@@ -102,7 +102,7 @@ if api_router is None:
                 "id": "user-123",
                 "email": "tiwariamit2503@gmail.com",
                 "username": "tiwariamit2503",
-                "full_name": "Amit Tiwari",
+                "full_name": profile.get("full_name", ""),
                 "onboarding_completed": True,
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-01T00:00:00Z"
@@ -351,7 +351,7 @@ async def get_user_info():
             "id": "user-123",
             "email": "tiwariamit2503@gmail.com",
             "username": "tiwariamit2503",
-            "full_name": "Amit Tiwari",
+            "full_name": profile.get("full_name", ""),
             "onboarding_completed": True,
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"

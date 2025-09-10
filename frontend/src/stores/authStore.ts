@@ -574,30 +574,40 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const { token } = get();
           if (!token) {
+            console.log('🔍 checkOnboardingStatus: No token available');
             return false;
           }
           
+          console.log('🔍 checkOnboardingStatus: Checking status with token...');
           const response = await fetch(`${API_BASE_URL}/api/v1/onboarding/status`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
           });
 
+          console.log('🔍 checkOnboardingStatus: Response status:', response.status);
+          
           if (response.ok) {
             const result = await response.json();
+            console.log('🔍 checkOnboardingStatus: Response data:', result);
+            
             if (result.success && result.data?.onboarding_completed) {
-            set({ onboardingCompleted: true });
-            return true;
-          } else {
-            set({ onboardingCompleted: false });
+              console.log('✅ checkOnboardingStatus: Onboarding completed');
+              set({ onboardingCompleted: true });
+              return true;
+            } else {
+              console.log('⚠️ checkOnboardingStatus: Onboarding not completed');
+              set({ onboardingCompleted: false });
               return false;
             }
           } else {
-            console.error('Onboarding status check failed:', response.status);
+            console.error('❌ checkOnboardingStatus: API call failed:', response.status);
+            set({ onboardingCompleted: false });
             return false;
           }
         } catch (error) {
-          console.error('Onboarding status check failed:', error);
+          console.error('❌ checkOnboardingStatus: Error:', error);
+          set({ onboardingCompleted: false });
           return false;
         }
       },

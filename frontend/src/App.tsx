@@ -79,15 +79,9 @@ const App: React.FC = () => {
         if (authResult) {
           console.log('🔍 App: Checking onboarding status...');
           
-          // First check if user data already has onboarding_completed
-          const { user } = useAuthStore.getState();
-          if (user?.onboarding_completed !== undefined) {
-            console.log('🔍 App: User data has onboarding_completed:', user.onboarding_completed);
-            useAuthStore.setState({ onboardingCompleted: user.onboarding_completed });
-          } else {
-            console.log('🔍 App: Fetching onboarding status from API...');
-            await checkOnboardingStatus();
-          }
+          // Always fetch fresh onboarding status from API
+          console.log('🔍 App: Fetching onboarding status from API...');
+          await checkOnboardingStatus();
         }
       } catch (error) {
         console.error('Failed to initialize authentication:', error);
