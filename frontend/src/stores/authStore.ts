@@ -339,82 +339,37 @@ export const useAuthStore = create<AuthStore>()(
               }
             } catch (backendError) {
               console.error('❌ AuthStore: Backend integration failed:', backendError);
-              console.log('🔄 AuthStore: Falling back to Supabase data...');
+              console.log('🔄 AuthStore: Using basic user data without profile...');
               
-              // Try to get user profile from user_profiles table
-              try {
-                const { data: profile, error: profileError } = await supabase
-                  .from('user_profiles')
-                  .select('*')
-                  .eq('id', user.id)
-                  .single();
+              // Use basic user data without trying to fetch from Supabase directly
+              // This ensures compatibility with RLS policies on domain
+              const userData: User = {
+                id: user.id,
+                email: user.email || '',
+                username: user.user_metadata?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '',
+                full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+                created_at: user.created_at,
+                updated_at: user.updated_at,
+                onboarding_completed: false, // Default to false, will be updated by checkOnboardingStatus
+              };
 
-                if (profile && !profileError) {
-                  console.log('✅ AuthStore: Found user profile:', profile);
-                  
-                  const userData: User = {
-                    id: user.id,
-                    email: user.email || '',
-                    username: profile.username || user.user_metadata?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '',
-                    full_name: profile.full_name || user.user_metadata?.full_name || user.user_metadata?.name || '',
-                    created_at: user.created_at,
-                    updated_at: user.updated_at,
-                    onboarding_completed: profile.onboarding_completed || false,
-                  };
+              console.log('✅ AuthStore: Using basic user data:', userData);
 
-                  console.log('✅ AuthStore: Using profile data:', userData);
+              set({
+                user: userData,
+                token: session?.access_token || null,
+                isAuthenticated: true,
+                isLoading: false,
+                error: null,
+                onboardingCompleted: false,
+              });
 
-                  set({
-                    user: userData,
-                    token: session?.access_token || null,
-                    isAuthenticated: true,
-                    isLoading: false,
-                    error: null,
-                    onboardingCompleted: profile.onboarding_completed || false,
-                  });
-
-                  // Store token in localStorage for persistence
-                  if (session?.access_token) {
-                    localStorage.setItem('auth_token', session.access_token);
-                  }
-                  
-                  return { success: true, user: userData };
-                } else {
-                  console.log('⚠️ AuthStore: No profile found, using basic user data');
-                  throw new Error('No profile found');
-                }
-              } catch (profileError) {
-                console.log('⚠️ AuthStore: Profile fetch failed, using basic user data');
-                
-                // Fallback to basic user data if profile fetch fails
-                const userData: User = {
-                  id: user.id,
-                  email: user.email || '',
-                  username: user.user_metadata?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '',
-                  full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
-                  created_at: user.created_at,
-                  updated_at: user.updated_at,
-                  onboarding_completed: false, // Default to false if no profile found
-                };
-
-                console.log('✅ AuthStore: Using basic user data:', userData);
-
-                set({
-                  user: userData,
-                  token: session?.access_token || null,
-                  isAuthenticated: true,
-                  isLoading: false,
-                  error: null,
-                  onboardingCompleted: false,
-                });
-
-                // Store token in localStorage for persistence
-                if (session?.access_token) {
-                  localStorage.setItem('auth_token', session.access_token);
-                }
-                
-                return { success: true, user: userData };
+              // Store token in localStorage for persistence
+              if (session?.access_token) {
+                localStorage.setItem('auth_token', session.access_token);
               }
+              
+              return { success: true, user: userData };
             }
           } else {
             const errorMessage = typeof error === 'string' ? error : (error as unknown as Error)?.message || 'Authentication failed';

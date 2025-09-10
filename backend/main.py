@@ -196,6 +196,49 @@ async def test_supabase():
             "error": str(e)
         }
 
+@app.get("/api/v1/test-profile-fetch/{user_id}")
+async def test_profile_fetch(user_id: str):
+    """Test profile fetching for a specific user"""
+    try:
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        print(f"🔍 Test profile fetch - User ID: {user_id}")
+        
+        # Test profile fetch
+        result = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+        print(f"🔍 Test profile fetch - Result: {result}")
+        
+        if result.data and len(result.data) > 0:
+            profile = result.data[0]
+            return {
+                "success": True,
+                "message": "Profile fetch successful",
+                "data": {
+                    "user_id": user_id,
+                    "profile_found": True,
+                    "profile": profile,
+                    "onboarding_completed": profile.get("onboarding_completed", False)
+                }
+            }
+        else:
+            return {
+                "success": True,
+                "message": "No profile found",
+                "data": {
+                    "user_id": user_id,
+                    "profile_found": False,
+                    "profile": None,
+                    "onboarding_completed": False
+                }
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Profile fetch test failed: {str(e)}",
+            "error": str(e)
+        }
+
 @app.get("/api/v1/debug-user/{user_id}")
 async def debug_user(user_id: str):
     """Debug specific user data"""
