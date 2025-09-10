@@ -242,7 +242,43 @@ async def test_supabase():
             "success": False,
             "message": f"Supabase connection failed: {str(e)}",
             "error": str(e)
-    }
+        }
+
+@app.get("/api/v1/debug-user/{user_id}")
+async def debug_user(user_id: str):
+    """Debug specific user data"""
+    try:
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+        
+        # Get user from auth.users
+        try:
+            auth_result = supabase_manager.client.auth.admin.get_user_by_id(user_id)
+            print(f"🔍 Auth user: {auth_result}")
+        except Exception as auth_error:
+            print(f"❌ Auth user fetch failed: {auth_error}")
+            auth_result = None
+        
+        # Get user profile
+        profile_result = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+        print(f"🔍 Profile result: {profile_result}")
+        
+        return {
+            "success": True,
+            "message": "User debug data",
+            "data": {
+                "user_id": user_id,
+                "auth_user": auth_result.user if hasattr(auth_result, 'user') else None,
+                "profile_data": profile_result.data if profile_result.data else [],
+                "profile_count": len(profile_result.data) if profile_result.data else 0
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Debug failed: {str(e)}",
+            "error": str(e)
+        }
 
 # Add working authentication endpoints directly to the app
 @app.post("/api/v1/auth/login")
