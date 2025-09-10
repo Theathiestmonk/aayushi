@@ -65,48 +65,61 @@ if api_router is None:
         email = request_data.get("email", "")
         password = request_data.get("password", "")
         
-        # Simple authentication check
-        if email == "tiwariamit2503@gmail.com" and password == "Amit@25*03":
-            return {
-            "success": True,
-                "message": "Login successful",
-            "data": {
-                    "user_id": "user-123",
-                    "email": email,
-                    "username": email.split('@')[0],
-                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImVtYWlsIjoiIiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.test-token",
-                    "profile": {
-                        "id": "user-123",
+        # Use real Supabase authentication
+        try:
+            from app.core.supabase import SupabaseManager
+            supabase_manager = SupabaseManager()
+            result = await supabase_manager.sign_in(email, password)
+            
+            if result["success"]:
+                user_id = result["user"].id
+                profile = result["profile"]
+                
+                from app.core.security import create_access_token
+                access_token = create_access_token(
+                    data={"sub": user_id, "email": email}
+                )
+                
+                return {
+                    "success": True,
+                    "message": "Login successful",
+                    "data": {
+                        "user_id": user_id,
                         "email": email,
-                        "username": email.split('@')[0],
-                        "full_name": profile.get("full_name", ""),
-                        "onboarding_completed": True,
-                        "created_at": "2024-01-01T00:00:00Z",
-                        "updated_at": "2024-01-01T00:00:00Z"
+                        "username": profile.get("username", email.split('@')[0]),
+                        "access_token": access_token,
+                        "profile": {
+                            "id": user_id,
+                            "email": email,
+                            "username": profile.get("username", email.split('@')[0]),
+                            "full_name": profile.get("full_name", ""),
+                            "onboarding_completed": profile.get("onboarding_completed", False),
+                            "created_at": profile.get("created_at"),
+                            "updated_at": profile.get("updated_at")
+                        }
                     }
                 }
-            }
-        else:
+            else:
+                return {
+                    "success": False,
+                    "message": "Invalid email or password",
+                    "error": "Invalid credentials"
+                }
+        except Exception as e:
+            print(f"❌ Login error: {str(e)}")
             return {
                 "success": False,
-                "message": "Invalid email or password",
-                "error": "Invalid credentials"
-        }
+                "message": "Login failed",
+                "error": str(e)
+            }
     
     @api_router.get("/auth/me")
-    async def get_current_user():
+    async def get_current_user(request: Request):
+        """Get current user profile - this should be handled by the proper auth router"""
         return {
-            "success": True,
-            "message": "Profile retrieved successfully",
-            "data": {
-                "id": "user-123",
-                "email": "tiwariamit2503@gmail.com",
-                "username": "tiwariamit2503",
-                "full_name": profile.get("full_name", ""),
-                "onboarding_completed": True,
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z"
-            }
+            "success": False,
+            "message": "Use /api/v1/auth/me endpoint instead",
+            "error": "This endpoint is deprecated"
         }
 
 @asynccontextmanager
