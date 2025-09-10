@@ -117,10 +117,15 @@ const Profile: React.FC = () => {
         },
       });
       
-      if (data.success && data.data.profile) {
-        setProfile(data.data.profile);
+      if (data.success) {
+        if (data.data.profile) {
+          setProfile(data.data.profile);
+        } else {
+          // User hasn't completed onboarding yet
+          setError('Please complete your onboarding to view your profile');
+        }
       } else {
-        throw new Error('Profile data not found');
+        throw new Error(data.message || 'Profile data not found');
       }
     } catch (err) {
       console.error('Profile fetch error:', err);

@@ -414,17 +414,28 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
         logger.info(f"✅ Using provided user ID: {user_id}")
         
         # Check if user has a profile in user_profiles (onboarding data)
-        existing_profile = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
-        
-        if existing_profile.data:
-            # User has onboarding data, just return existing profile
-            logger.info(f"✅ User has existing profile: {oauth_data.email}")
-            user = existing_profile.data[0]
-        else:
-            # User doesn't have onboarding data yet, create basic profile
-            logger.info(f"✅ Creating basic profile for user: {oauth_data.email}")
+        try:
+            existing_profile = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
             
-            profile_data = {
+            if existing_profile.data and len(existing_profile.data) > 0:
+                # User has onboarding data, just return existing profile
+                logger.info(f"✅ User has existing profile: {oauth_data.email}")
+                user = existing_profile.data[0]
+            else:
+                # User doesn't have onboarding data yet, return basic user data
+                logger.info(f"✅ User has no profile yet, using basic data: {oauth_data.email}")
+                user = {
+                    "id": user_id,
+                    "email": oauth_data.email,
+                    "full_name": oauth_data.full_name,
+                    "onboarding_completed": False,
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+        except Exception as profile_error:
+            # If profile access fails, use basic user data
+            logger.warning(f"⚠️ Profile access failed, using basic user data: {profile_error}")
+            user = {
                 "id": user_id,
                 "email": oauth_data.email,
                 "full_name": oauth_data.full_name,
@@ -432,21 +443,6 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat()
             }
-            
-            profile_response = supabase_manager.client.table("user_profiles").insert(profile_data).execute()
-            
-            if profile_response.data:
-                user = profile_response.data[0]
-                logger.info(f"✅ Basic profile created: {oauth_data.email}")
-            else:
-                # Fallback to basic user data
-                user = {
-                    "id": user_id,
-                    "email": oauth_data.email,
-                    "full_name": oauth_data.full_name,
-                    "onboarding_completed": False
-                }
-                logger.warning(f"⚠️ Failed to create profile, using basic user data: {oauth_data.email}")
         
         # Create access token
         access_token = create_access_token(

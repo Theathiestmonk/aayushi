@@ -836,10 +836,13 @@ async def get_onboarding_profile(request: Request):
             else:
                 print(f"⚠️ Onboarding profile - No profile found for user ID: {user_id}")
                 print(f"🔍 Onboarding profile - Query result: {result}")
+                # Return success with empty profile - user needs to complete onboarding
                 return {
-                    "success": False,
-                    "message": "Profile not found",
-                    "error": "No profile data found for this user"
+                    "success": True,
+                    "message": "No profile found - user needs to complete onboarding",
+                    "data": {
+                        "profile": None
+                    }
                 }
         except Exception as db_error:
             print(f"❌ Onboarding profile - Database error: {db_error}")
