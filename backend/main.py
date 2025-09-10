@@ -385,7 +385,7 @@ async def submit_onboarding_temp(request: Request):
             print(f"✅ Using user ID: {user_id}")
         except Exception as token_error:
             print(f"❌ Token verification failed: {token_error}")
-    return {
+            return {
                 "success": False,
                 "message": f"Token verification failed: {str(token_error)}",
                 "error": str(token_error)
@@ -478,11 +478,11 @@ async def submit_onboarding_temp(request: Request):
                 "error": str(db_error)
             }
         
-    return {
-        "success": True,
+        return {
+            "success": True,
             "message": "Onboarding submitted successfully and profile created!",
-        "data": {
-            "onboarding_completed": True,
+            "data": {
+                "onboarding_completed": True,
                 "redirect_to": "dashboard",
                 "user_id": user_id,
                 "profile_updated_at": "2024-01-01T00:00:00Z"
@@ -717,10 +717,10 @@ async def get_onboarding_status(request: Request):
                 }
             else:
                 print(f"⚠️ No profile found for user {user_id}")
-    return {
-        "success": True,
+                return {
+                    "success": True,
                     "message": "No profile found - onboarding not completed",
-        "data": {
+                    "data": {
                         "onboarding_completed": False,
                         "profile": None
                     }
@@ -763,7 +763,7 @@ async def get_onboarding_profile(request: Request):
             payload = verify_token(token)
             user_id = payload.get("sub")
             if not user_id:
-            return {
+                return {
                     "success": False,
                     "message": "Invalid token - no user ID found",
                     "error": "Invalid token"
@@ -789,10 +789,10 @@ async def get_onboarding_profile(request: Request):
             if result.data and len(result.data) > 0:
                 profile_data = result.data[0]
                 print(f"✅ Onboarding profile - Found profile data: {profile_data.get('full_name', 'Unknown')}")
-            return {
-                "success": True,
+                return {
+                    "success": True,
                     "message": "Onboarding profile retrieved successfully",
-                "data": {
+                    "data": {
                         "profile": profile_data
                     }
                 }
@@ -865,9 +865,9 @@ async def get_profile(request: Request):
             
             if result.data and len(result.data) > 0:
                 profile_data = result.data[0]
-    return {
-        "success": True,
-        "message": "Profile retrieved successfully",
+                return {
+                    "success": True,
+                    "message": "Profile retrieved successfully",
                     "data": profile_data
                 }
             else:
