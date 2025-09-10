@@ -789,6 +789,7 @@ async def get_onboarding_profile(request: Request):
             if result.data and len(result.data) > 0:
                 profile_data = result.data[0]
                 print(f"✅ Onboarding profile - Found profile data: {profile_data.get('full_name', 'Unknown')}")
+                print(f"🔍 Onboarding profile - Full profile data: {profile_data}")
                 return {
                     "success": True,
                     "message": "Onboarding profile retrieved successfully",
@@ -798,6 +799,7 @@ async def get_onboarding_profile(request: Request):
                 }
             else:
                 print(f"⚠️ Onboarding profile - No profile found for user ID: {user_id}")
+                print(f"🔍 Onboarding profile - Query result: {result}")
                 return {
                     "success": False,
                     "message": "Profile not found",
@@ -861,16 +863,22 @@ async def get_profile(request: Request):
         
         # Fetch user profile from database
         try:
+            print(f"🔍 Profile - Fetching profile for user ID: {user_id}")
             result = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
+            print(f"🔍 Profile - Database query result: {result}")
             
             if result.data and len(result.data) > 0:
                 profile_data = result.data[0]
+                print(f"✅ Profile - Found profile data: {profile_data.get('full_name', 'Unknown')}")
+                print(f"🔍 Profile - Full profile data: {profile_data}")
                 return {
                     "success": True,
                     "message": "Profile retrieved successfully",
                     "data": profile_data
                 }
             else:
+                print(f"⚠️ Profile - No profile found for user ID: {user_id}")
+                print(f"🔍 Profile - Query result: {result}")
                 return {
                     "success": False,
                     "message": "Profile not found",
