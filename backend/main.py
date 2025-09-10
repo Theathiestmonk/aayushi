@@ -59,68 +59,7 @@ if api_router is None:
             }
         }
     
-    @api_router.post("/auth/login")
-    async def login(request_data: dict):
-        # Get email and password from request
-        email = request_data.get("email", "")
-        password = request_data.get("password", "")
-        
-        # Use real Supabase authentication
-        try:
-            from app.core.supabase import SupabaseManager
-            supabase_manager = SupabaseManager()
-            result = await supabase_manager.sign_in(email, password)
-            
-            if result["success"]:
-                user_id = result["user"].id
-                profile = result["profile"]
-                
-                from app.core.security import create_access_token
-                access_token = create_access_token(
-                    data={"sub": user_id, "email": email}
-                )
-                
-                return {
-                    "success": True,
-                    "message": "Login successful",
-                    "data": {
-                        "user_id": user_id,
-                        "email": email,
-                        "username": profile.get("username", email.split('@')[0]),
-                        "access_token": access_token,
-                        "profile": {
-                            "id": user_id,
-                            "email": email,
-                            "username": profile.get("username", email.split('@')[0]),
-                            "full_name": profile.get("full_name", ""),
-                            "onboarding_completed": profile.get("onboarding_completed", False),
-                            "created_at": profile.get("created_at"),
-                            "updated_at": profile.get("updated_at")
-                        }
-                    }
-                }
-            else:
-                return {
-                    "success": False,
-                    "message": "Invalid email or password",
-                    "error": "Invalid credentials"
-                }
-        except Exception as e:
-            print(f"❌ Login error: {str(e)}")
-            return {
-                "success": False,
-                "message": "Login failed",
-                "error": str(e)
-            }
-    
-    @api_router.get("/auth/me")
-    async def get_current_user(request: Request):
-        """Get current user profile - this should be handled by the proper auth router"""
-        return {
-            "success": False,
-            "message": "Use /api/v1/auth/me endpoint instead",
-            "error": "This endpoint is deprecated"
-        }
+    # Auth endpoints are handled by the proper auth router in app/api/v1/endpoints/auth.py
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

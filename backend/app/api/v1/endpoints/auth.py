@@ -268,12 +268,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise HTTPException(status_code=401, detail="Invalid token")
         
         # Get user profile from Supabase (handle case where user hasn't completed onboarding)
+        logger.info(f"🔍 Auth /me: Fetching profile for user ID: {user_id}")
         result = await supabase_manager.get_user_profile(user_id)
+        logger.info(f"🔍 Auth /me: Profile result: {result}")
         
         if result["success"]:
             # User has a complete profile
             profile_data = result["profile"]
             profile_data["onboarding_completed"] = profile_data.get("onboarding_completed", False)
+            logger.info(f"✅ Auth /me: Found profile data: {profile_data.get('full_name', 'Unknown')}")
             
             return AuthResponse(
                 success=True,
@@ -284,6 +287,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             # User doesn't have a profile yet (hasn't completed onboarding)
             # Return basic info from the JWT token
             email = payload.get("email", "")
+            logger.info(f"⚠️ Auth /me: No profile found, returning basic info for: {email}")
             return AuthResponse(
                 success=True,
                 message="Basic user info retrieved",
