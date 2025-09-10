@@ -510,6 +510,7 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
         logger.error(f"❌ Google OAuth failed: {str(e)}")
         return {
             "success": False,
+            "message": f"Google OAuth authentication failed: {str(e)}",
             "error": f"Google OAuth authentication failed: {str(e)}"
         }
 
