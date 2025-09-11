@@ -96,6 +96,8 @@ def verify_token(token: str) -> Dict[str, Any]:
         ValueError: If token is invalid or expired
     """
     try:
+        logger.info(f"🔍 Verifying token: {token[:20]}...")
+        
         # First try to decode with our custom secret key
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -106,7 +108,12 @@ def verify_token(token: str) -> Dict[str, Any]:
             if exp is None:
                 raise ValueError("Token has no expiration")
             
-            if datetime.utcnow() > datetime.fromtimestamp(exp):
+            current_time = datetime.utcnow()
+            exp_time = datetime.fromtimestamp(exp)
+            logger.info(f"🔍 Token expiration check - Current: {current_time}, Expires: {exp_time}")
+            
+            if current_time > exp_time:
+                logger.warning(f"⚠️ Token has expired - Current: {current_time}, Expires: {exp_time}")
                 raise ValueError("Token has expired")
             
             # Check if token has required fields
@@ -117,7 +124,8 @@ def verify_token(token: str) -> Dict[str, Any]:
             logger.info(f"✅ Custom token verified successfully for user: {user_id}")
             return payload
             
-        except JWTError:
+        except JWTError as jwt_error:
+            logger.warning(f"⚠️ Custom token verification failed: {jwt_error}")
             # If custom token fails, try to decode as Supabase token (no verification)
             # This is for development/testing purposes
             try:
@@ -130,6 +138,7 @@ def verify_token(token: str) -> Dict[str, Any]:
                 else:
                     raise ValueError("Supabase token missing user ID")
             except JWTError as e:
+                logger.error(f"❌ Supabase token decode failed: {e}")
                 raise ValueError(f"Invalid token format: {str(e)}")
         
     except JWTError as e:

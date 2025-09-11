@@ -46,6 +46,7 @@ export interface AuthActions {
   refreshToken: () => Promise<boolean>;
   checkOnboardingStatus: () => Promise<boolean>;
   resetAuthState: () => void;
+  clearInvalidToken: () => void;
 }
 
 export interface AuthStore extends AuthState, AuthActions {}
@@ -82,13 +83,31 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
   console.log('🚀 Making API request to:', url);
   console.log('🔧 API_BASE_URL:', API_BASE_URL);
   
+  // Get auth token from localStorage
+  let token = localStorage.getItem('auth_token');
+  console.log('🔑 Auth token exists:', !!token);
+  console.log('🔑 Auth token value:', token ? token.substring(0, 50) + '...' : 'null');
+  console.log('🔑 Auth token full value:', token);
+  
+  // If no token in localStorage, try to get from Zustand state
+  if (!token) {
+    const { token: stateToken } = useAuthStore.getState();
+    if (stateToken) {
+      token = stateToken;
+      console.log('🔑 Using token from Zustand state');
+    }
+  }
+  
   const defaultOptions: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
       ...options.headers,
     },
     ...options,
   };
+  
+  console.log('🔧 Request headers:', defaultOptions.headers);
 
   try {
     const response = await fetch(url, defaultOptions);
@@ -96,6 +115,42 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
     console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
+      // Handle 401 Unauthorized specifically
+      if (response.status === 401) {
+        console.log('🔐 401 Unauthorized - checking if token is valid...');
+        
+        // First, try to get the response body to see what the actual error is
+        let errorMessage = 'Authentication failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || 'Authentication failed';
+          console.log('🔐 401 Error details:', errorData);
+        } catch (e) {
+          console.log('🔐 401 Error - could not parse response body');
+        }
+        
+        // Check if this is a token format error (not expired)
+        if (errorMessage.includes('Not enough segments') || errorMessage.includes('Invalid token format')) {
+          console.log('🔐 401 Error - Invalid token format, clearing auth state');
+          const { resetAuthState } = useAuthStore.getState();
+          resetAuthState();
+          localStorage.removeItem('auth_token');
+          window.location.href = '/login';
+          throw new Error('Invalid token format. Please log in again.');
+        }
+        
+        // Check if this is an "Invalid user information" error (corrupted token)
+        if (errorMessage.includes('Invalid user information')) {
+          console.log('🔐 401 Error - Invalid user information, clearing corrupted token');
+          const { clearInvalidToken } = useAuthStore.getState();
+          clearInvalidToken();
+          throw new Error('Invalid user information. Please log in again.');
+        }
+        
+        // For other 401 errors, don't clear the token immediately
+        console.log('🔐 401 Error - Other authentication issue:', errorMessage);
+        throw new Error(`Authentication failed: ${errorMessage}`);
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
@@ -266,6 +321,7 @@ export const useAuthStore = create<AuthStore>()(
       handleGoogleCallback: async () => {
         try {
           console.log('🔄 AuthStore: Starting Google callback handling...');
+          console.log('🔄 AuthStore: Current URL:', window.location.href);
           
           // Set loading state but don't clear existing data yet
           set({ 
@@ -273,13 +329,17 @@ export const useAuthStore = create<AuthStore>()(
             error: null 
           });
           
+          console.log('🔄 AuthStore: Calling handleAuthCallback...');
           const { success, session, user, error } = await handleAuthCallback();
           
           console.log('🔄 AuthStore: Callback result:', { success, user: user?.email, hasSession: !!session });
+          console.log('🔄 AuthStore: Session details:', session ? { access_token: !!session.access_token, user: session.user?.email } : 'No session');
+          console.log('🔄 AuthStore: User details:', user ? { id: user.id, email: user.email } : 'No user');
           
           if (success && user) {
             // Send OAuth data to backend for proper account linking
             console.log('🔄 AuthStore: Sending OAuth data to backend for account linking...');
+            console.log('🔄 AuthStore: User data from Supabase:', { id: user.id, email: user.email });
             
             try {
               const oauthData = {
@@ -291,6 +351,7 @@ export const useAuthStore = create<AuthStore>()(
               };
 
               console.log('🔄 AuthStore: OAuth data:', oauthData);
+              console.log('🔄 AuthStore: Making request to:', `${API_BASE_URL}/api/v1/auth/google-oauth`);
 
               const response = await fetch(`${API_BASE_URL}/api/v1/auth/google-oauth`, {
                 method: 'POST',
@@ -301,6 +362,7 @@ export const useAuthStore = create<AuthStore>()(
               });
 
               console.log('🔄 AuthStore: Backend response status:', response.status);
+              console.log('🔄 AuthStore: Backend response headers:', Object.fromEntries(response.headers.entries()));
               
               const result = await response.json();
               console.log('🔄 AuthStore: Backend response data:', result);
@@ -328,13 +390,17 @@ export const useAuthStore = create<AuthStore>()(
                 });
 
                 console.log('✅ AuthStore: Google OAuth - onboardingCompleted set to:', result.data.onboarding_completed);
+                console.log('✅ AuthStore: Google OAuth - token set in state:', !!result.data.access_token);
 
                 // Store token in localStorage for persistence
                 localStorage.setItem('auth_token', result.data.access_token);
+                console.log('✅ AuthStore: Google OAuth - token stored in localStorage');
+                console.log('✅ AuthStore: Google OAuth - token value:', result.data.access_token.substring(0, 50) + '...');
                 
                 return { success: true, user: userData };
               } else {
                 console.error('❌ AuthStore: Backend OAuth failed:', result.error);
+                console.error('❌ AuthStore: Backend OAuth response:', result);
                 throw new Error(result.error || 'Backend authentication failed');
               }
             } catch (backendError) {
@@ -357,19 +423,18 @@ export const useAuthStore = create<AuthStore>()(
 
               set({
                 user: userData,
-                token: session?.access_token || null,
-                isAuthenticated: true,
+                token: null, // Don't set Supabase token - it won't work with backend
+                isAuthenticated: false, // Set to false since we don't have valid backend token
                 isLoading: false,
-                error: null,
+                error: 'Backend authentication failed - diet plan generation will not work',
                 onboardingCompleted: false,
               });
 
-              // Store token in localStorage for persistence
-              if (session?.access_token) {
-                localStorage.setItem('auth_token', session.access_token);
-              }
+              // Don't store any token since we don't have a valid backend token
+              console.log('⚠️ AuthStore: Fallback - No valid backend token available');
+              console.log('⚠️ AuthStore: Fallback - User will be redirected to login');
               
-              return { success: true, user: userData };
+              return { success: false, error: 'Backend authentication failed' };
             }
           } else {
             const errorMessage = typeof error === 'string' ? error : (error as unknown as Error)?.message || 'Authentication failed';
@@ -403,11 +468,14 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setToken: (token: string | null) => {
+        console.log('🔄 setToken: Setting token:', !!token);
         set({ token, isAuthenticated: !!token });
         if (token) {
           localStorage.setItem('auth_token', token);
+          console.log('🔄 setToken: Token stored in localStorage');
         } else {
           localStorage.removeItem('auth_token');
+          console.log('🔄 setToken: Token removed from localStorage');
         }
       },
 
@@ -436,9 +504,16 @@ export const useAuthStore = create<AuthStore>()(
           console.log('🔍 checkAuth: token exists:', !!token);
           
           if (!token) {
-            console.log('🔍 checkAuth: No token, setting isAuthenticated to false');
-            set({ isAuthenticated: false });
-            return false;
+            console.log('🔍 checkAuth: No token in state, checking localStorage...');
+            const storedToken = localStorage.getItem('auth_token');
+            if (storedToken) {
+              console.log('🔍 checkAuth: Found token in localStorage, restoring to state...');
+              set({ token: storedToken, isAuthenticated: true });
+            } else {
+              console.log('🔍 checkAuth: No token found, setting isAuthenticated to false');
+              set({ isAuthenticated: false });
+              return false;
+            }
           }
 
           // Check with backend API to get proper user data
@@ -451,6 +526,30 @@ export const useAuthStore = create<AuthStore>()(
 
           if (!response.ok) {
             console.error('❌ Backend auth check failed:', response.status);
+            
+            // If backend auth fails, check if there's a valid Supabase session
+            console.log('🔍 checkAuth: Backend auth failed, checking Supabase session...');
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError) {
+              console.error('❌ Supabase session error:', sessionError);
+              set({ isAuthenticated: false, token: null });
+              localStorage.removeItem('auth_token');
+              return false;
+            }
+            
+            if (sessionData.session) {
+              console.log('✅ checkAuth: Valid Supabase session found, handling OAuth callback...');
+              // Try to handle the OAuth callback to get a new token
+              const { handleGoogleCallback } = get();
+              const result = await handleGoogleCallback();
+              
+              if (result.success) {
+                console.log('✅ checkAuth: OAuth callback successful, user authenticated');
+                return true;
+              }
+            }
+            
             set({ isAuthenticated: false, token: null });
             localStorage.removeItem('auth_token');
             return false;
@@ -580,6 +679,18 @@ export const useAuthStore = create<AuthStore>()(
         localStorage.clear();
         sessionStorage.clear();
       },
+
+      clearInvalidToken: () => {
+        console.log('🧹 Clearing invalid token and forcing fresh login...');
+        const { resetAuthState } = get();
+        resetAuthState();
+        
+        // Also clear any Supabase session
+        supabase.auth.signOut();
+        
+        // Redirect to login page
+        window.location.href = '/login';
+      },
     }),
     {
       name: 'auth-storage',
@@ -590,12 +701,44 @@ export const useAuthStore = create<AuthStore>()(
         onboardingCompleted: state.onboardingCompleted,
       }),
       onRehydrateStorage: () => (state) => {
-        // Restore token from localStorage if not in state
-        if (state && !state.token) {
+        // Always restore token from localStorage on app start, but validate it first
+        if (state) {
           const storedToken = localStorage.getItem('auth_token');
+          console.log('🔄 onRehydrateStorage: Stored token exists:', !!storedToken);
+          console.log('🔄 onRehydrateStorage: Token value:', storedToken ? storedToken.substring(0, 50) + '...' : 'null');
+          
           if (storedToken) {
-            state.token = storedToken;
-            state.isAuthenticated = true;
+            // Validate token before restoring it
+            try {
+              // Decode token without verification to check structure
+              const payload = JSON.parse(atob(storedToken.split('.')[1]));
+              console.log('🔄 onRehydrateStorage: Token payload:', payload);
+              
+              // Check if token has required fields and valid structure
+              if (payload.sub && payload.email && payload.email !== '') {
+                state.token = storedToken;
+                state.isAuthenticated = true;
+                console.log('🔄 onRehydrateStorage: Valid token restored from localStorage');
+                console.log('🔄 onRehydrateStorage: State updated - isAuthenticated:', true);
+              } else {
+                console.log('⚠️ onRehydrateStorage: Invalid token structure, clearing...');
+                console.log('⚠️ onRehydrateStorage: Token fields - sub:', payload.sub, 'email:', payload.email);
+                localStorage.removeItem('auth_token');
+                state.token = null;
+                state.isAuthenticated = false;
+                console.log('🔄 onRehydrateStorage: Invalid token cleared');
+              }
+            } catch (error) {
+              console.log('⚠️ onRehydrateStorage: Token decode failed, clearing...', error);
+              localStorage.removeItem('auth_token');
+              state.token = null;
+              state.isAuthenticated = false;
+              console.log('🔄 onRehydrateStorage: Corrupted token cleared');
+            }
+          } else {
+            console.log('🔄 onRehydrateStorage: No token found in localStorage');
+            state.token = null;
+            state.isAuthenticated = false;
           }
         }
       },
@@ -603,14 +746,102 @@ export const useAuthStore = create<AuthStore>()(
   )
 );
 
+// Test function to check token status (for debugging)
+export const checkTokenStatus = () => {
+  const localStorageToken = localStorage.getItem('auth_token');
+  const { token: stateToken, isAuthenticated } = useAuthStore.getState();
+  
+  console.log('🔍 Token Status Check:');
+  console.log('  - localStorage token exists:', !!localStorageToken);
+  console.log('  - localStorage token value:', localStorageToken ? localStorageToken.substring(0, 50) + '...' : 'null');
+  console.log('  - Zustand state token exists:', !!stateToken);
+  console.log('  - Zustand state token value:', stateToken ? stateToken.substring(0, 50) + '...' : 'null');
+  console.log('  - isAuthenticated:', isAuthenticated);
+  
+  return {
+    localStorageToken: !!localStorageToken,
+    stateToken: !!stateToken,
+    isAuthenticated,
+    tokenValue: localStorageToken || stateToken
+  };
+};
+
+// Function to manually clear corrupted token
+export const clearCorruptedToken = () => {
+  console.log('🧹 Manually clearing corrupted token...');
+  localStorage.removeItem('auth_token');
+  sessionStorage.clear();
+  
+  const { resetAuthState } = useAuthStore.getState();
+  resetAuthState();
+  
+  // Also clear Supabase session
+  supabase.auth.signOut();
+  
+  console.log('✅ Corrupted token cleared, redirecting to login...');
+  window.location.href = '/login';
+};
+
+// Make it available globally for debugging
+if (typeof window !== 'undefined') {
+  (window as any).checkTokenStatus = checkTokenStatus;
+  (window as any).clearCorruptedToken = clearCorruptedToken;
+}
+
 // Initialize auth state on app start
 export const initializeAuth = async () => {
   try {
     console.log('🔄 initializeAuth: Starting auth initialization...');
-  const { checkAuth } = useAuthStore.getState();
-    const isAuthenticated = await checkAuth();
-    console.log('🔄 initializeAuth: Auth check result:', isAuthenticated);
-    return isAuthenticated;
+    
+    // First check if we have a token in localStorage
+    const storedToken = localStorage.getItem('auth_token');
+    console.log('🔄 initializeAuth: Stored token exists:', !!storedToken);
+    
+    // If we have a token, check if it's valid
+    if (storedToken) {
+      console.log('🔄 initializeAuth: Checking stored token with backend...');
+      const { checkAuth } = useAuthStore.getState();
+      const isAuthenticated = await checkAuth();
+      console.log('🔄 initializeAuth: Auth check result:', isAuthenticated);
+      return isAuthenticated;
+    }
+    
+    // If no token, check if there's a valid Supabase session
+    console.log('🔄 initializeAuth: No token found, checking Supabase session...');
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+    console.log('🔍 initializeAuth: Supabase session data:', sessionData);
+    console.log('🔍 initializeAuth: Supabase session error:', sessionError);
+    
+    if (sessionError) {
+      console.error('❌ initializeAuth: Supabase session error:', sessionError);
+      return false;
+    }
+    
+    if (sessionData.session) {
+      console.log('✅ initializeAuth: Valid Supabase session found:', sessionData.session.user?.email);
+      console.log('🔍 initializeAuth: Session access token exists:', !!sessionData.session.access_token);
+      
+      // Handle the Google OAuth callback to get our backend token
+      const { handleGoogleCallback } = useAuthStore.getState();
+      const result = await handleGoogleCallback();
+      
+      console.log('🔍 initializeAuth: OAuth callback result:', result);
+      
+      if (result.success) {
+        console.log('✅ initializeAuth: Google OAuth callback successful');
+        // Verify the token was stored
+        const newToken = localStorage.getItem('auth_token');
+        console.log('🔍 initializeAuth: New token stored:', !!newToken);
+        return true;
+      } else {
+        console.error('❌ initializeAuth: Google OAuth callback failed:', result.error);
+        return false;
+      }
+    }
+    
+    console.log('🔄 initializeAuth: No valid session found, user not authenticated');
+    return false;
   } catch (error) {
     console.error('💥 initializeAuth failed:', error);
     return false;

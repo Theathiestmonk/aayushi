@@ -336,22 +336,7 @@ async def login_endpoint(request_data: dict):
             "error": str(e)
         }
 
-@app.get("/api/v1/auth/me")
-async def get_user_info():
-    """Working user info endpoint"""
-    return {
-        "success": True,
-        "message": "Profile retrieved successfully",
-        "data": {
-            "id": "user-123",
-            "email": "tiwariamit2503@gmail.com",
-            "username": "tiwariamit2503",
-            "full_name": profile.get("full_name", ""),
-            "onboarding_completed": True,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z"
-        }
-    }
+# Removed hardcoded /me endpoint - using proper endpoint from auth router
 
 @app.post("/api/v1/auth/logout")
 async def logout_endpoint():
@@ -638,56 +623,7 @@ async def get_calorie_data():
         }
     }
 
-# Add diet plans endpoints
-@app.get("/api/v1/diet-plans/health-metrics")
-async def get_health_metrics():
-    """Get health metrics for diet plans"""
-    return {
-        "success": True,
-        "message": "Health metrics retrieved",
-        "data": {
-            "weight": 70,
-            "height": 175,
-            "age": 28,
-            "activity_level": "moderate",
-            "goals": ["weight_loss", "muscle_gain"],
-            "dietary_restrictions": [],
-            "bmi": 22.9,
-            "target_weight": 65
-        }
-    }
-
-@app.get("/api/v1/diet-plans/my-plans")
-async def get_my_diet_plans():
-    """Get user's diet plans"""
-    return {
-        "success": True,
-        "message": "Diet plans retrieved",
-        "data": {
-            "plans": [
-                {
-                    "id": "plan-1",
-                    "name": "Weight Loss Plan",
-                    "description": "7-day weight loss meal plan",
-                    "duration": 7,
-                    "calories_per_day": 1500,
-                    "status": "active",
-                    "created_at": "2024-09-01T00:00:00Z",
-                    "progress": 60
-                },
-                {
-                    "id": "plan-2", 
-                    "name": "Muscle Building Plan",
-                    "description": "High protein diet for muscle gain",
-                    "duration": 14,
-                    "calories_per_day": 2200,
-                    "status": "completed",
-                    "created_at": "2024-08-15T00:00:00Z",
-                    "progress": 100
-                }
-            ]
-        }
-    }
+# Removed hardcoded diet plan endpoints - now using proper database calls from diet_plans router
 
 # Add onboarding status endpoint
 @app.get("/api/v1/onboarding/status")

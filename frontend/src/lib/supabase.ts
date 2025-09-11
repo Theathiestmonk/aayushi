@@ -74,12 +74,20 @@ export const handleAuthCallback = async () => {
   try {
     console.log('🔄 Handling OAuth callback...')
     console.log('🔗 Current URL:', window.location.href)
+    console.log('🔗 URL hash:', window.location.hash)
+    console.log('🔗 URL search:', window.location.search)
     
     // Add a small delay to allow Supabase to process the OAuth callback
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    console.log('⏳ Waiting for OAuth callback to process...')
+    await new Promise(resolve => setTimeout(resolve, 2000)) // Increased delay
+    console.log('⏳ Delay completed, checking session...')
     
     // First, try to get the session (this handles the OAuth callback)
+    console.log('🔍 Getting session from Supabase...')
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    
+    console.log('🔍 Session data:', sessionData)
+    console.log('🔍 Session error:', sessionError)
     
     if (sessionError) {
       console.error('❌ Session error:', sessionError)
@@ -88,6 +96,7 @@ export const handleAuthCallback = async () => {
     
     if (sessionData.session) {
       console.log('✅ Session found:', sessionData.session.user?.email)
+      console.log('✅ Session access token exists:', !!sessionData.session.access_token)
       return { 
         success: true, 
         session: sessionData.session,
@@ -95,8 +104,14 @@ export const handleAuthCallback = async () => {
       }
     }
     
+    console.log('⚠️ No session found, trying getUser...')
+    
     // If no session, try to get user directly (for cases where session isn't immediately available)
+    console.log('🔍 Getting user from Supabase...')
     const { data: userData, error: userError } = await supabase.auth.getUser()
+    
+    console.log('🔍 User data:', userData)
+    console.log('🔍 User error:', userError)
     
     if (userError) {
       console.error('❌ User error:', userError)
@@ -112,10 +127,16 @@ export const handleAuthCallback = async () => {
       }
     }
     
+    console.log('⚠️ No user found, checking URL parameters...')
+    
     // If still no user, try to handle the OAuth callback from URL
+    console.log('🔍 Checking URL parameters...')
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
     const error = urlParams.get('error')
+    
+    console.log('🔍 URL code:', code)
+    console.log('🔍 URL error:', error)
     
     if (error) {
       console.error('❌ OAuth error in URL:', error)
@@ -126,6 +147,9 @@ export const handleAuthCallback = async () => {
       console.log('🔄 OAuth code found in URL, attempting to exchange...')
       // The code should be automatically handled by Supabase, but let's try to get the session again
       const { data: retryData, error: retryError } = await supabase.auth.getSession()
+      
+      console.log('🔍 Retry session data:', retryData)
+      console.log('🔍 Retry session error:', retryError)
       
       if (retryError) {
         console.error('❌ Retry session error:', retryError)

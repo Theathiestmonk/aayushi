@@ -838,9 +838,13 @@ class SupabaseManager:
             plans_response = self.client.table("diet_plans").select("plan_id").eq("user_id", user_id).execute()
             remaining_plans = len(plans_response.data) if plans_response.data else 0
             
-            # Check daily plans
-            daily_response = self.client.table("daily_plans").select("daily_plan_id").eq("user_id", user_id).execute()
-            remaining_daily_plans = len(daily_response.data) if daily_response.data else 0
+            # Check daily plans (through diet plans)
+            daily_response = self.client.table("daily_plans").select("daily_plan_id, plan_id").execute()
+            remaining_daily_plans = 0
+            if daily_response.data:
+                # Filter daily plans that belong to this user's diet plans
+                user_plan_ids = [plan["plan_id"] for plan in plans_response.data] if plans_response.data else []
+                remaining_daily_plans = len([dp for dp in daily_response.data if dp["plan_id"] in user_plan_ids])
             
             # Check meals (through daily plans)
             remaining_meals = 0
@@ -1081,8 +1085,8 @@ class SupabaseManager:
             # Add user_id to progress data
             progress_data["user_id"] = user_id
             
-            # Insert progress tracking
-            progress_response = self.client.table("progress_tracking").insert(progress_data).execute()
+            # Insert progress tracking (use upsert to handle duplicates)
+            progress_response = self.client.table("progress_tracking").upsert(progress_data).execute()
             
             if progress_response.data:
                 progress_id = progress_response.data[0]["progress_id"]

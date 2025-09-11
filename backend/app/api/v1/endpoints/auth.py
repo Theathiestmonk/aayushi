@@ -261,36 +261,81 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     """
     try:
         # Verify the token
+        logger.info(f"🔍 Auth /me: Verifying token: {credentials.credentials[:20]}...")
+        logger.info(f"🔍 Auth /me: Full token: {credentials.credentials}")
         payload = verify_token(credentials.credentials)
         user_id = payload.get("sub")
         
+        logger.info(f"🔍 Auth /me: Token verified, user_id: {user_id}")
+        logger.info(f"🔍 Auth /me: Full payload: {payload}")
+        
         if not user_id:
+            logger.error(f"❌ Auth /me: No user_id in token payload: {payload}")
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Get user profile from Supabase (handle case where user hasn't completed onboarding)
-        logger.info(f"🔍 Auth /me: Fetching profile for user ID: {user_id}")
-        result = await supabase_manager.get_user_profile(user_id)
-        logger.info(f"🔍 Auth /me: Profile result: {result}")
-        
-        if result["success"]:
-            # User has a complete profile
-            profile_data = result["profile"]
-            profile_data["onboarding_completed"] = profile_data.get("onboarding_completed", False)
-            logger.info(f"✅ Auth /me: Found profile data: {profile_data.get('full_name', 'Unknown')}")
+        # Get user data from auth.users table (primary source of truth for authentication)
+        logger.info(f"🔍 Auth /me: Fetching user data from auth.users for user ID: {user_id}")
+        try:
+            # Get user from auth.users table
+            auth_user_response = supabase_manager.client.auth.admin.get_user_by_id(user_id)
+            logger.info(f"🔍 Auth /me: Auth user response: {auth_user_response}")
             
+            if auth_user_response.user:
+                auth_user = auth_user_response.user
+                user_email = auth_user.email or payload.get("email", "") or payload.get("umail", "")
+                logger.info(f"✅ Auth /me: Found auth user: {user_email}")
+                
+                # Get profile data from user_profiles table (for onboarding data)
+                profile_result = await supabase_manager.get_user_profile(user_id)
+                logger.info(f"🔍 Auth /me: Profile result: {profile_result}")
+                
+                if profile_result["success"]:
+                    # User has a complete profile
+                    profile_data = profile_result["profile"]
+                    profile_data["onboarding_completed"] = profile_data.get("onboarding_completed", False)
+                    
+                    # Ensure required fields are present for API compatibility
+                    profile_data["id"] = user_id
+                    profile_data["email"] = user_email  # Use email from auth.users
+                    
+                    logger.info(f"✅ Auth /me: Found complete profile data: {profile_data.get('full_name', 'Unknown')}")
+                    logger.info(f"🔍 Auth /me: Profile data fields: {list(profile_data.keys())}")
+                    
+                    return AuthResponse(
+                        success=True,
+                        message="Profile retrieved successfully",
+                        data=profile_data
+                    )
+                else:
+                    # User doesn't have a profile yet (hasn't completed onboarding)
+                    # Return basic info from auth.users
+                    logger.info(f"⚠️ Auth /me: No profile found, returning basic info for: {user_email}")
+                    return AuthResponse(
+                        success=True,
+                        message="Basic user info retrieved",
+                        data={
+                            "id": user_id,
+                            "email": user_email,
+                            "username": user_email.split('@')[0] if user_email else "",
+                            "full_name": auth_user.user_metadata.get("full_name", "") if auth_user.user_metadata else "",
+                            "onboarding_completed": False,
+                            "created_at": auth_user.created_at,
+                            "updated_at": auth_user.updated_at
+                        }
+                    )
+            else:
+                # User not found in auth.users
+                logger.error(f"❌ Auth /me: User not found in auth.users: {user_id}")
+                raise HTTPException(status_code=401, detail="User not found")
+                
+        except Exception as auth_error:
+            logger.error(f"❌ Auth /me: Failed to get user from auth.users: {auth_error}")
+            # Fallback to JWT payload data
+            email = payload.get("email", "") or payload.get("umail", "")
+            logger.info(f"⚠️ Auth /me: Using fallback data for: {email}")
             return AuthResponse(
                 success=True,
-                message="Profile retrieved successfully",
-                data=profile_data
-            )
-        else:
-            # User doesn't have a profile yet (hasn't completed onboarding)
-            # Return basic info from the JWT token
-            email = payload.get("email", "")
-            logger.info(f"⚠️ Auth /me: No profile found, returning basic info for: {email}")
-            return AuthResponse(
-                success=True,
-                message="Basic user info retrieved",
+                message="Basic user info retrieved (fallback)",
                 data={
                     "id": user_id,
                     "email": email,
@@ -422,12 +467,59 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
             existing_profile = supabase_manager.client.table("user_profiles").select("*").eq("id", user_id).execute()
             
             if existing_profile.data and len(existing_profile.data) > 0:
-                # User has onboarding data, just return existing profile
+                # User has onboarding data, ensure email is properly set
                 logger.info(f"✅ User has existing profile: {oauth_data.email}")
                 user = existing_profile.data[0]
+                
+                # Ensure email field is properly set from OAuth data
+                if not user.get("email") or user.get("email") == "":
+                    user["email"] = oauth_data.email
+                    logger.info(f"✅ Updated email field for existing user: {oauth_data.email}")
+                
+                # Update the profile in database with correct email
+                try:
+                    # Update user_profiles table
+                    update_result = supabase_manager.client.table("user_profiles").update({
+                        "email": oauth_data.email
+                    }).eq("id", user_id).execute()
+                    
+                    if update_result.data:
+                        logger.info(f"✅ Updated user profile email in database: {oauth_data.email}")
+                    else:
+                        logger.warning(f"⚠️ Failed to update email in user_profiles for user: {user_id}")
+                    
+                    # Also update auth.users table (this is the primary source of truth)
+                    try:
+                        auth_update_result = supabase_manager.client.auth.admin.update_user_by_id(
+                            user_id, 
+                            {"email": oauth_data.email}
+                        )
+                        if auth_update_result.user:
+                            logger.info(f"✅ Updated auth.users email: {oauth_data.email}")
+                        else:
+                            logger.warning(f"⚠️ Failed to update email in auth.users for user: {user_id}")
+                    except Exception as auth_update_error:
+                        logger.warning(f"⚠️ Could not update email in auth.users: {auth_update_error}")
+                        
+                except Exception as update_error:
+                    logger.warning(f"⚠️ Could not update email in database: {update_error}")
             else:
                 # User doesn't have onboarding data yet, return basic user data
                 logger.info(f"✅ User has no profile yet, using basic data: {oauth_data.email}")
+                
+                # Update auth.users table with correct email
+                try:
+                    auth_update_result = supabase_manager.client.auth.admin.update_user_by_id(
+                        user_id, 
+                        {"email": oauth_data.email}
+                    )
+                    if auth_update_result.user:
+                        logger.info(f"✅ Updated auth.users email for new user: {oauth_data.email}")
+                    else:
+                        logger.warning(f"⚠️ Failed to update email in auth.users for new user: {user_id}")
+                except Exception as auth_update_error:
+                    logger.warning(f"⚠️ Could not update email in auth.users for new user: {auth_update_error}")
+                
                 user = {
                     "id": user_id,
                     "email": oauth_data.email,
@@ -439,6 +531,20 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
         except Exception as profile_error:
             # If profile access fails, use basic user data
             logger.warning(f"⚠️ Profile access failed, using basic user data: {profile_error}")
+            
+            # Update auth.users table with correct email
+            try:
+                auth_update_result = supabase_manager.client.auth.admin.update_user_by_id(
+                    user_id, 
+                    {"email": oauth_data.email}
+                )
+                if auth_update_result.user:
+                    logger.info(f"✅ Updated auth.users email in fallback: {oauth_data.email}")
+                else:
+                    logger.warning(f"⚠️ Failed to update email in auth.users in fallback: {user_id}")
+            except Exception as auth_update_error:
+                logger.warning(f"⚠️ Could not update email in auth.users in fallback: {auth_update_error}")
+            
             user = {
                 "id": user_id,
                 "email": oauth_data.email,
@@ -456,6 +562,8 @@ async def google_oauth_login(oauth_data: GoogleOAuthRequest):
         logger.info(f"✅ Google OAuth successful for user: {user['email']}")
         logger.info(f"🔍 User data structure: {user}")
         logger.info(f"🔍 Onboarding completed value: {user.get('onboarding_completed', 'NOT_FOUND')}")
+        logger.info(f"🔍 Access token created: {access_token[:50]}...")
+        logger.info(f"🔍 Access token length: {len(access_token)}")
         
         return {
             "success": True,

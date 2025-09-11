@@ -552,11 +552,37 @@ async def generate_diet_plan(
     """
     try:
         # Extract user information
-        user_id = current_user.data.get("id")
+        logger.info(f"🔍 Diet plan generation - Current user data: {current_user.data}")
+        logger.info(f"🔍 Diet plan generation - Request headers: {dict(http_request.headers) if http_request else 'No request object'}")
+        logger.info(f"🔍 Diet plan generation - Current user data type: {type(current_user.data)}")
+        logger.info(f"🔍 Diet plan generation - Current user data keys: {list(current_user.data.keys()) if isinstance(current_user.data, dict) else 'Not a dict'}")
+        
+        # Try different possible field names for user ID and email
+        user_id = current_user.data.get("id") or current_user.data.get("user_id")
         email = current_user.data.get("email")
         
+        # If still not found, check if the data structure is different
         if not user_id or not email:
+            logger.warning(f"⚠️ Diet plan generation - Standard fields not found, checking alternative structure")
+            logger.warning(f"⚠️ Available fields in current_user.data: {list(current_user.data.keys())}")
+            
+            # Try to extract from nested structure or different field names
+            if not user_id:
+                user_id = current_user.data.get("sub")  # JWT sub field
+            if not email:
+                email = current_user.data.get("email_address") or current_user.data.get("user_email") or current_user.data.get("umail")
+        
+        logger.info(f"🔍 Diet plan generation - Extracted user_id: {user_id}, email: {email}")
+        
+        if not user_id:
+            logger.error(f"❌ Diet plan generation - Missing user ID: user_id={user_id}")
+            logger.error(f"❌ Full user data structure: {current_user.data}")
             raise HTTPException(status_code=401, detail="Invalid user information")
+        
+        # Email can be empty for existing users, use a fallback
+        if not email or email.strip() == "":
+            email = f"user_{user_id[:8]}@dietitian.local"
+            logger.warning(f"⚠️ Diet plan generation - Empty email, using fallback: {email}")
         
         logger.info(f"🍽️ Generating diet plan for user: {email}")
         
@@ -632,7 +658,7 @@ async def generate_diet_plan(
         # Log data access for audit trail
         await supabase_manager.log_profile_access(
             user_id, 
-            "diet_plan_generation", 
+            "create",  # Valid access type: view, update, create, delete
             str(http_request.client.host) if http_request and http_request.client else None,
             http_request.headers.get("user-agent") if http_request else None
         )

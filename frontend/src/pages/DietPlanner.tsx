@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
-import { apiRequest } from '../utils/api';
+import { useAuthStore, apiRequest } from '../stores/authStore';
 import { 
   Target, 
   Activity, 
@@ -64,7 +63,7 @@ interface DietPlan {
 
 const DietPlanner: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, onboardingCompleted } = useAuthStore();
   const [healthMetrics, setHealthMetrics] = useState<HealthMetrics | null>(null);
   const [dietPlan, setDietPlan] = useState<DietPlan | null>(null);
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
@@ -80,9 +79,15 @@ const DietPlanner: React.FC = () => {
       return;
     }
     
+    // Check if user has completed onboarding
+    if (!onboardingCompleted) {
+      setError('Please complete your onboarding first to generate diet plans.');
+      return;
+    }
+    
     fetchHealthMetrics();
     fetchSavedPlans();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, onboardingCompleted, navigate]);
 
   const fetchHealthMetrics = async () => {
     try {
@@ -175,6 +180,28 @@ const DietPlanner: React.FC = () => {
       setGenerating(true);
       setError(null);
       
+      console.log('🍽️ DietPlanner: Starting diet plan generation...');
+      console.log('🍽️ DietPlanner: isAuthenticated:', isAuthenticated);
+      console.log('🍽️ DietPlanner: onboardingCompleted:', onboardingCompleted);
+      
+      // Check authentication first
+      if (!isAuthenticated) {
+        console.log('🍽️ DietPlanner: User not authenticated');
+        setError('Please log in to generate diet plans.');
+        setGenerating(false);
+        return;
+      }
+      
+      // Check onboarding completion before generating
+      if (!onboardingCompleted) {
+        console.log('🍽️ DietPlanner: Onboarding not completed');
+        setError('Please complete your onboarding first to generate diet plans.');
+        setGenerating(false);
+        return;
+      }
+      
+      console.log('🍽️ DietPlanner: All checks passed, making API request...');
+      
       const response = await apiRequest('/diet-plans/generate', {
         method: 'POST',
         body: JSON.stringify({
@@ -184,17 +211,39 @@ const DietPlanner: React.FC = () => {
         })
       });
       
+      console.log('🍽️ DietPlanner: API response received:', response);
+      
       if (response.success) {
+        console.log('🍽️ DietPlanner: Diet plan generated successfully');
         setDietPlan(response.data.diet_plan);
+        setSuccessMessage('Diet plan generated successfully!');
         // Refresh health metrics and saved plans
         await fetchHealthMetrics();
         await fetchSavedPlans();
       } else {
-        setError('Failed to generate diet plan');
+        console.log('🍽️ DietPlanner: Diet plan generation failed:', response.error);
+        setError(response.message || 'Failed to generate diet plan');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to generate diet plan');
+      console.error('🍽️ DietPlanner: Diet plan generation error:', err);
+      console.error('🍽️ DietPlanner: Error message:', err.message);
+      console.error('🍽️ DietPlanner: Error type:', typeof err);
+      
+      if (err.message && err.message.includes('onboarding')) {
+        console.log('🍽️ DietPlanner: Onboarding error detected');
+        setError('Please complete your onboarding first to generate diet plans.');
+      } else if (err.message && err.message.includes('profile')) {
+        console.log('🍽️ DietPlanner: Profile error detected');
+        setError('User profile not found. Please complete your onboarding first.');
+      } else if (err.message && err.message.includes('Authentication')) {
+        console.log('🍽️ DietPlanner: Authentication error detected');
+        setError('Authentication failed. Please log in again.');
+      } else {
+        console.log('🍽️ DietPlanner: Other error detected');
+        setError(err.message || 'Failed to generate diet plan. Please try again.');
+      }
     } finally {
+      console.log('🍽️ DietPlanner: Generation process completed');
       setGenerating(false);
     }
   };
@@ -224,6 +273,37 @@ const DietPlanner: React.FC = () => {
     );
   }
 
+  // Show onboarding completion message if not completed
+  if (!onboardingCompleted) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+          <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold text-yellow-800 mb-4">Onboarding Required</h2>
+          <p className="text-yellow-700 mb-6 text-lg">
+            Please complete your onboarding to access diet plan generation and health metrics.
+          </p>
+          <div className="space-y-4">
+            <button
+              onClick={() => navigate('/onboarding')}
+              className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
+            >
+              Complete Onboarding
+            </button>
+            <div className="text-sm text-yellow-600">
+              <p>You'll need to provide:</p>
+              <ul className="mt-2 space-y-1">
+                <li>• Personal information & measurements</li>
+                <li>• Health history & preferences</li>
+                <li>• Goals & lifestyle habits</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
@@ -231,6 +311,26 @@ const DietPlanner: React.FC = () => {
         <h1 className="text-4xl font-bold text-gray-900 mb-2">AI Dietitian Agent</h1>
         <p className="text-gray-600 text-lg">Your personalized nutrition and health companion</p>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
+            <p className="text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <CheckCircle className="w-5 h-5 text-green-500 mr-3" />
+            <p className="text-green-700">{successMessage}</p>
+          </div>
+        </div>
+      )}
 
       {/* Health Metrics Section */}
       {healthMetrics && (

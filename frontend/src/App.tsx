@@ -67,6 +67,7 @@ const App: React.FC = () => {
 
   console.log('🔍 App: isAuthenticated:', isAuthenticated, 'onboardingCompleted:', onboardingCompleted, 'isInitializing:', isInitializing);
   console.log('🔍 App: User data:', useAuthStore.getState().user);
+  console.log('🔍 App: Token exists:', !!localStorage.getItem('auth_token'));
 
   useEffect(() => {
     const initApp = async () => {
@@ -185,7 +186,11 @@ const App: React.FC = () => {
           <Route
             path="/"
             element={
-              isAuthenticated ? (
+              isInitializing ? (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+                  <LoadingSpinner />
+                </div>
+              ) : isAuthenticated ? (
                 onboardingCompleted ? (
                   <Navigate to="/dashboard" replace />
                 ) : (
@@ -307,7 +312,11 @@ const App: React.FC = () => {
           <Route
             path="*"
             element={
-              isAuthenticated ? (
+              isInitializing ? (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+                  <LoadingSpinner />
+                </div>
+              ) : isAuthenticated ? (
                 <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
