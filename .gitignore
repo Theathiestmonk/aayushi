@@ -1,10 +1,14 @@
 # Environment variables and sensitive files
 .env
+.env.*
 .env.local
 .env.production
 .env.development
 .env.staging
-.env.*.local
+.env.test
+.env.backup
+.env.example
+*.env
 
 # Python
 __pycache__/
@@ -36,6 +40,8 @@ env/
 ENV/
 env.bak/
 venv.bak/
+.venv/
+.venv
 
 # Node.js
 node_modules/
@@ -153,6 +159,12 @@ Thumbs.db
 secrets.json
 config.json
 credentials.json
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
 
 # Upload directories
 uploads/
