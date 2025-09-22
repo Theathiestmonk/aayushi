@@ -140,6 +140,42 @@ async def get_weekly_report():
         "weight_change_kg": -0.5
     }
 
+@router.get("/workout-plans")
+async def get_workout_plans():
+    """Get workout plans for current user"""
+    # TODO: Implement actual workout plans retrieval
+    return {
+        "success": True,
+        "plans": []
+    }
+
+@router.get("/workout-sessions")
+async def get_workout_sessions():
+    """Get workout sessions for current user"""
+    # TODO: Implement actual workout sessions retrieval
+    return {
+        "success": True,
+        "sessions": []
+    }
+
+@router.get("/stats")
+async def get_tracking_stats():
+    """Get comprehensive tracking statistics"""
+    # TODO: Implement actual stats calculation
+    return {
+        "success": True,
+        "stats": {
+            "total_workouts": 24,
+            "total_duration": 1800,
+            "total_calories_burned": 12000,
+            "current_streak": 7,
+            "weekly_goal": 5,
+            "weekly_progress": 3,
+            "favorite_exercise": "Push-ups",
+            "improvement_areas": ["Consistency", "Endurance"]
+        }
+    }
+
 
 
 

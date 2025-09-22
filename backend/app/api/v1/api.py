@@ -37,6 +37,20 @@ try:
 except ImportError as e:
     logger.error(f"❌ Failed to import onboarding endpoints: {e}")
 
+try:
+    from app.api.v1.endpoints import tracking
+    api_router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
+    logger.info("✅ Tracking router included successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ Tracking endpoints not available: {e}")
+
+try:
+    from app.api.v1.endpoints import workouts
+    api_router.include_router(workouts.router, prefix="/workouts", tags=["Workouts"])
+    logger.info("✅ Workouts router included successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ Workouts endpoints not available: {e}")
+
 # Comment out problematic modules for now
 # try:
 #     from app.api.v1.endpoints import agents
@@ -44,13 +58,6 @@ except ImportError as e:
 #     logger.info("✅ Agents router included successfully")
 # except ImportError as e:
 #     logger.warning(f"⚠️ Agents endpoints not available: {e}")
-
-# try:
-#     from app.api.v1.endpoints import tracking
-#     api_router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
-#     logger.info("✅ Tracking router included successfully")
-# except ImportError as e:
-#     logger.warning(f"⚠️ Tracking endpoints not available: {e}")
 
 # try:
 #     from app.api.v1.endpoints import mcp
