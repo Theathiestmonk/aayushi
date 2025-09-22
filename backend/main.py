@@ -169,6 +169,118 @@ async def api_test():
         "routes": [route.path for route in app.routes if hasattr(route, 'path')]
     }
 
+@app.get("/api/v1/tracking/health-metrics")
+async def tracking_health_metrics(request: Request):
+    """Fallback tracking endpoint so the route exists even if the tracking router fails to mount"""
+    try:
+        # Extract user from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {
+                "success": False,
+                "message": "Authorization header missing or invalid",
+                "error": "Missing or invalid authorization"
+            }
+
+        token = auth_header.split(" ")[1]
+
+        # Decode JWT token to get user ID
+        try:
+            from app.core.security import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("sub")
+            if not user_id:
+                return {
+                    "success": False,
+                    "message": "Invalid token - no user ID found",
+                    "error": "Invalid token"
+                }
+        except Exception as token_error:
+            return {
+                "success": False,
+                "message": f"Token verification failed: {str(token_error)}",
+                "error": str(token_error)
+            }
+
+        # Supabase access
+        from app.core.supabase import SupabaseManager
+        supabase_manager = SupabaseManager()
+
+        # Prefer most recent record within last 24 hours
+        from datetime import datetime, timedelta, date as dt_date
+        window_start_iso = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+
+        recent = supabase_manager.client.table("daily_health_metrics") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .gte("updated_at", window_start_iso) \
+            .order("updated_at", desc=True) \
+            .limit(1) \
+            .execute()
+
+        if recent.data:
+            return {
+                "success": True,
+                "message": "Health metrics retrieved successfully",
+                "data": recent.data[0]
+            }
+
+        # Fallback: look for today's row
+        today_iso = dt_date.today().isoformat()
+        today_resp = supabase_manager.client.table("daily_health_metrics") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("date", today_iso) \
+            .limit(1) \
+            .execute()
+
+        if today_resp.data:
+            return {
+                "success": True,
+                "message": "Health metrics for today",
+                "data": today_resp.data[0]
+            }
+
+        # Auto-create zero-initialized row for today
+        zero_data = {
+            "user_id": user_id,
+            "date": today_iso,
+            "steps_today": 0,
+            "steps_goal": 0,
+            "sleep_hours": 0,
+            "sleep_goal": 0,
+            "sleep_quality": 0,
+            "water_intake_l": 0,
+            "water_goal_l": 0,
+            "calories_eaten": 0,
+            "calories_burned": 0,
+            "calories_goal": 0,
+            "carbs_g": 0,
+            "carbs_goal": 0,
+            "protein_g": 0,
+            "protein_goal": 0,
+            "fat_g": 0,
+            "fat_goal": 0,
+            "weight_kg": 0,
+            "target_weight_kg": 0,
+        }
+
+        inserted = supabase_manager.client.table("daily_health_metrics").insert(zero_data).execute()
+        created = inserted.data[0] if inserted.data else zero_data
+
+        return {
+            "success": True,
+            "message": "Initialized daily health metrics with zeros",
+            "data": created
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to fetch health metrics: {str(e)}",
+            "error": str(e)
+        }
+
 @app.get("/api/v1/test-supabase")
 async def test_supabase():
     """Test Supabase connection"""
