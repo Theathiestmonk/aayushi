@@ -84,6 +84,15 @@ const Dashboard: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
+  const formatNumber = (value?: number | null, options?: Intl.NumberFormatOptions) => {
+    if (value === null || value === undefined) return '--';
+    try {
+      return value.toLocaleString(undefined, options);
+    } catch {
+      return String(value);
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login');
@@ -91,7 +100,18 @@ const Dashboard: React.FC = () => {
     }
     
     fetchDashboardData();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, token, navigate]);
+
+  // Refetch on window focus to get latest within 24h window
+  useEffect(() => {
+    const onFocus = () => {
+      if (isAuthenticated) {
+        fetchDashboardData();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [isAuthenticated, token]);
 
 
 
@@ -133,6 +153,35 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const updateHealthMetrics = async (updates: Partial<HealthMetrics>) => {
+    try {
+      if (!token) return;
+      
+      const response = await apiRequest('/tracking/health-metrics', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (response.success && response.data) {
+        // Update local state with new data
+        setHealthMetrics(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ...updates
+          };
+        });
+        console.log('Health metrics updated successfully');
+      }
+    } catch (error) {
+      console.error('Failed to update health metrics:', error);
+    }
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -144,28 +193,44 @@ const Dashboard: React.FC = () => {
       const currentWeight = userProfile?.current_weight_kg || userProfile?.weight_kg || 70;
       const targetWeight = calculateTargetWeight(userProfile);
       
-      // Mock data for now - replace with actual API calls
-      const mockHealthMetrics: HealthMetrics = {
-        weight_kg: currentWeight,
-        target_weight_kg: targetWeight,
-        steps_today: 8050,
-        steps_goal: 10000,
-        sleep_hours: 6.5,
-        sleep_goal: 8,
-        water_intake_l: 1.3,
-        water_goal_l: 2.0,
-        calories_eaten: 1750,
-        calories_burned: 510,
-        calories_goal: 2000,
-        macronutrients: {
-          carbs_g: 120,
-          carbs_goal: 325,
-          protein_g: 70,
-          protein_goal: 75,
-          fat_g: 20,
-          fat_goal: 44
+      // Fetch real health metrics from API (no demo or zero fallbacks)
+      let healthMetricsData: HealthMetrics | null = null;
+      
+      try {
+        const response = await apiRequest('/tracking/health-metrics', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (response.success && response.data) {
+          const data = response.data;
+          healthMetricsData = {
+            weight_kg: data.weight_kg ?? currentWeight,
+            target_weight_kg: data.target_weight_kg ?? targetWeight,
+            steps_today: data.steps_today,
+            steps_goal: data.steps_goal,
+            sleep_hours: data.sleep_hours,
+            sleep_goal: data.sleep_goal,
+            water_intake_l: data.water_intake_l,
+            water_goal_l: data.water_goal_l,
+            calories_eaten: data.calories_eaten,
+            calories_burned: data.calories_burned,
+            calories_goal: data.calories_goal,
+            macronutrients: {
+              carbs_g: data.carbs_g,
+              carbs_goal: data.carbs_goal,
+              protein_g: data.protein_g,
+              protein_goal: data.protein_goal,
+              fat_g: data.fat_g,
+              fat_goal: data.fat_goal
+            }
+          };
         }
-      };
+      } catch (error) {
+        console.error('Failed to fetch health metrics:', error);
+        healthMetricsData = null;
+      }
 
       const mockMeals: Meal[] = [
         {
@@ -237,7 +302,7 @@ const Dashboard: React.FC = () => {
         }
       ];
 
-      setHealthMetrics(mockHealthMetrics);
+      setHealthMetrics(healthMetricsData);
       setTodayMeals(mockMeals);
       setWorkouts(mockWorkouts);
       
@@ -325,44 +390,77 @@ const Dashboard: React.FC = () => {
               }}
             />
             
-            <MetricCard
-              title="Steps"
-              value={`${healthMetrics?.steps_today?.toLocaleString()} steps`}
-              icon={Footprints}
-              iconColor="text-green-600"
-              iconBgColor="bg-green-100"
-              progress={{
-                current: healthMetrics?.steps_today || 0,
-                goal: healthMetrics?.steps_goal || 0,
-                unit: 'steps'
-              }}
-            />
+            <div className="relative">
+              <MetricCard
+                title="Steps"
+                value={`${formatNumber(healthMetrics?.steps_today)} steps`}
+                icon={Footprints}
+                iconColor="text-green-600"
+                iconBgColor="bg-green-100"
+                progress={{
+                  current: healthMetrics?.steps_today || 0,
+                  goal: healthMetrics?.steps_goal || 0,
+                  unit: 'steps'
+                }}
+              />
+              <button
+                onClick={() => updateHealthMetrics({ 
+                  steps_today: (healthMetrics?.steps_today || 0) + 1000 
+                })}
+                className="absolute top-2 right-2 bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded-full transition-colors"
+                title="Add 1000 steps"
+              >
+                +1K
+              </button>
+            </div>
             
-            <MetricCard
-              title="Sleep"
-              value={`${healthMetrics?.sleep_hours} hours`}
-              icon={Moon}
-              iconColor="text-purple-600"
-              iconBgColor="bg-purple-100"
-              progress={{
-                current: healthMetrics?.sleep_hours || 0,
-                goal: healthMetrics?.sleep_goal || 0,
-                unit: 'hours'
-              }}
-            />
+            <div className="relative">
+              <MetricCard
+                title="Sleep"
+                value={`${formatNumber(healthMetrics?.sleep_hours)} hours`}
+                icon={Moon}
+                iconColor="text-purple-600"
+                iconBgColor="bg-purple-100"
+                progress={{
+                  current: healthMetrics?.sleep_hours || 0,
+                  goal: healthMetrics?.sleep_goal || 0,
+                  unit: 'hours'
+                }}
+              />
+              <button
+                onClick={() => updateHealthMetrics({ 
+                  sleep_hours: (healthMetrics?.sleep_hours || 0) + 0.5 
+                })}
+                className="absolute top-2 right-2 bg-purple-500 hover:bg-purple-600 text-white text-xs px-2 py-1 rounded-full transition-colors"
+                title="Add 0.5 hours"
+              >
+                +0.5h
+              </button>
+            </div>
             
-            <MetricCard
-              title="Water Intake"
-              value={`${healthMetrics?.water_intake_l}/${healthMetrics?.water_goal_l} L`}
-              icon={Droplets}
-              iconColor="text-blue-600"
-              iconBgColor="bg-blue-100"
-              progress={{
-                current: healthMetrics?.water_intake_l || 0,
-                goal: healthMetrics?.water_goal_l || 0,
-                unit: 'L'
-              }}
-            />
+            <div className="relative">
+              <MetricCard
+                title="Water Intake"
+                value={`${formatNumber(healthMetrics?.water_intake_l)}/${formatNumber(healthMetrics?.water_goal_l)} L`}
+                icon={Droplets}
+                iconColor="text-blue-600"
+                iconBgColor="bg-blue-100"
+                progress={{
+                  current: healthMetrics?.water_intake_l || 0,
+                  goal: healthMetrics?.water_goal_l || 0,
+                  unit: 'L'
+                }}
+              />
+              <button
+                onClick={() => updateHealthMetrics({ 
+                  water_intake_l: (healthMetrics?.water_intake_l || 0) + 0.25 
+                })}
+                className="absolute top-2 right-2 bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded-full transition-colors"
+                title="Add 250ml water"
+              >
+                +250ml
+              </button>
+            </div>
           </div>
 
           {/* Weight Data and Calories Cards */}
@@ -410,11 +508,11 @@ const Dashboard: React.FC = () => {
                 {/* Left: Circular Progress */}
                 <ProgressChart
                   type="circle"
-                  value={healthMetrics?.calories_eaten || 0}
-                  maxValue={healthMetrics?.calories_goal || 0}
+                  value={healthMetrics?.calories_eaten ?? 0}
+                  maxValue={healthMetrics?.calories_goal ?? 0}
                   size={96}
                   color="#3b82f6"
-                  label={`${Math.max(0, (healthMetrics?.calories_goal || 0) - (healthMetrics?.calories_eaten || 0))}`}
+                  label={`${Math.max(0, (healthMetrics?.calories_goal ?? 0) - (healthMetrics?.calories_eaten ?? 0))}`}
                   subtitle="kcal left"
                 />
                 
@@ -441,12 +539,12 @@ const Dashboard: React.FC = () => {
                     <div>
                       <div className="flex justify-between text-sm text-gray-600 mb-1">
                         <span>Carbohydrates</span>
-                        <span>{healthMetrics?.macronutrients.carbs_g} / {healthMetrics?.macronutrients.carbs_goal}g</span>
+                        <span>{formatNumber(healthMetrics?.macronutrients.carbs_g)} / {formatNumber(healthMetrics?.macronutrients.carbs_goal)}g</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-green-500 h-2 rounded-full"
-                          style={{ width: `${Math.min(100, ((healthMetrics?.macronutrients.carbs_g || 0) / (healthMetrics?.macronutrients.carbs_goal || 1)) * 100)}%` }}
+                          style={{ width: `${Math.min(100, ((healthMetrics?.macronutrients.carbs_g ?? 0) / (healthMetrics?.macronutrients.carbs_goal || 1)) * 100)}%` }}
                         ></div>
                       </div>
                     </div>
@@ -454,12 +552,12 @@ const Dashboard: React.FC = () => {
                     <div>
                       <div className="flex justify-between text-sm text-gray-600 mb-1">
                         <span>Proteins</span>
-                        <span>{healthMetrics?.macronutrients.protein_g} / {healthMetrics?.macronutrients.protein_goal}g</span>
+                        <span>{formatNumber(healthMetrics?.macronutrients.protein_g)} / {formatNumber(healthMetrics?.macronutrients.protein_goal)}g</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-blue-500 h-2 rounded-full"
-                          style={{ width: `${Math.min(100, ((healthMetrics?.macronutrients.protein_g || 0) / (healthMetrics?.macronutrients.protein_goal || 1)) * 100)}%` }}
+                          style={{ width: `${Math.min(100, ((healthMetrics?.macronutrients.protein_g ?? 0) / (healthMetrics?.macronutrients.protein_goal || 1)) * 100)}%` }}
                         ></div>
                       </div>
                     </div>
@@ -467,12 +565,12 @@ const Dashboard: React.FC = () => {
                     <div>
                       <div className="flex justify-between text-sm text-gray-600 mb-1">
                         <span>Fats</span>
-                        <span>{healthMetrics?.macronutrients.fat_g} / {healthMetrics?.macronutrients.fat_goal}g</span>
+                        <span>{formatNumber(healthMetrics?.macronutrients.fat_g)} / {formatNumber(healthMetrics?.macronutrients.fat_goal)}g</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-yellow-500 h-2 rounded-full"
-                          style={{ width: `${Math.min(100, ((healthMetrics?.macronutrients.fat_g || 0) / (healthMetrics?.macronutrients.fat_goal || 1)) * 100)}%` }}
+                          style={{ width: `${Math.min(100, ((healthMetrics?.macronutrients.fat_g ?? 0) / (healthMetrics?.macronutrients.fat_goal || 1)) * 100)}%` }}
                         ></div>
                       </div>
                     </div>

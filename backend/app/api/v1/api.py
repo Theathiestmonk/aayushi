@@ -45,12 +45,12 @@ except ImportError as e:
 # except ImportError as e:
 #     logger.warning(f"⚠️ Agents endpoints not available: {e}")
 
-# try:
-#     from app.api.v1.endpoints import tracking
-#     api_router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
-#     logger.info("✅ Tracking router included successfully")
-# except ImportError as e:
-#     logger.warning(f"⚠️ Tracking endpoints not available: {e}")
+try:
+    from app.api.v1.endpoints import tracking
+    api_router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
+    logger.info("✅ Tracking router included successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ Tracking endpoints not available: {e}")
 
 # try:
 #     from app.api.v1.endpoints import mcp
