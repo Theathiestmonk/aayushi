@@ -1,12 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Get Supabase URL and anon key from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://yemfctzdmuatwhareemm.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllbWZjdHpkbXVhdHdoYXJlZW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ5NzQ4NzQsImV4cCI6MjA1MDU1MDg3NH0.REPLACE_WITH_YOUR_ACTUAL_ANON_KEY'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-// Log configuration for debugging
-console.log('🔧 Supabase URL:', supabaseUrl)
-console.log('🔑 Supabase Anon Key:', supabaseAnonKey ? 'Set' : 'Missing')
+if (!supabaseUrl || !supabaseAnonKey) {
+  // Fail fast if env is not configured to avoid confusing 401 errors
+  console.error('Supabase environment not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend/.env.local')
+  throw new Error('Missing Supabase configuration')
+}
 
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

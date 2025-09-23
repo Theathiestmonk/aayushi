@@ -10,6 +10,7 @@ import OnboardingCheck from '@/components/OnboardingCheck';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import EmailConfirmation from '@/pages/EmailConfirmation';
+import ForgotPassword from '@/pages/ForgotPassword';
 import AuthCallback from '@/pages/AuthCallback';
 import Dashboard from '@/pages/Dashboard';
 import Onboarding from '@/pages/Onboarding';
@@ -147,6 +148,39 @@ const App: React.FC = () => {
                   transition={{ duration: 0.3 }}
                 >
                   <Register />
+                </motion.div>
+              </PublicRoute>
+            }
+          />
+
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <ForgotPassword />
+                </motion.div>
+              </PublicRoute>
+            }
+          />
+
+          {/* Alias route for compatibility with Supabase redirectTo and user expectation */}
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <ForgotPassword />
                 </motion.div>
               </PublicRoute>
             }

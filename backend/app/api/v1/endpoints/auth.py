@@ -32,6 +32,16 @@ class PasswordReset(BaseModel):
     """Password reset request model"""
     email: EmailStr = Field(..., description="User's email address")
 
+class ForgotPasswordRequest(BaseModel):
+    """Send OTP for password recovery"""
+    email: EmailStr
+
+class ResetPasswordWithOtpRequest(BaseModel):
+    """Reset password using OTP verification"""
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=6)
+
 class GoogleOAuthRequest(BaseModel):
     """Google OAuth request model"""
     supabase_user_id: str = Field(..., description="Supabase user ID from OAuth")
@@ -229,21 +239,23 @@ async def request_password_reset(reset_data: PasswordReset):
     - **email**: User's email address
     """
     try:
+        # Validate user exists before attempting to send
+        try:
+            profile_lookup = supabase_manager.client.table("user_profiles").select("id").eq("email", str(reset_data.email)).limit(1).execute()
+            user_exists = bool(profile_lookup.data)
+        except Exception:
+            user_exists = True  # If lookup fails, don't block; let Supabase handle
+
+        if not user_exists:
+            logger.warning(f"⚠️ Password reset requested for non-existent email: {reset_data.email}")
+            raise HTTPException(status_code=404, detail="No account found with this email")
+
         # Send password reset email via Supabase
         result = await supabase_manager.reset_password(reset_data.email)
-        
-        if result["success"]:
-            logger.info(f"✅ Password reset email sent: {reset_data.email}")
-            
-            return AuthResponse(
-                success=True,
-                message="Password reset email sent. Please check your email."
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Password reset failed: {result.get('error', 'Unknown error')}"
-            )
+        if result.get("success"):
+            logger.info(f"✅ Password reset email sent: {reset_data.email} (redirect_to={result.get('redirect_to')})")
+            return AuthResponse(success=True, message="Password reset email sent. Please check your email.")
+        raise HTTPException(status_code=500, detail=f"Password reset failed: {result.get('error', 'Unknown error')}")
             
     except Exception as e:
         logger.error(f"❌ Password reset failed: {str(e)}")
@@ -251,6 +263,47 @@ async def request_password_reset(reset_data: PasswordReset):
             status_code=500,
             detail=f"Password reset failed: {str(e)}"
         )
+
+@router.post("/forgot-password", response_model=AuthResponse, summary="Send password recovery OTP")
+async def forgot_password(payload: ForgotPasswordRequest):
+    """Send password recovery OTP to user's email"""
+    try:
+        # Use Supabase helper (Python SDK: reset_password_email)
+        result = await supabase_manager.reset_password(str(payload.email))
+        if result.get("success"):
+            return AuthResponse(success=True, message="Verification code sent to your email")
+        raise HTTPException(status_code=400, detail=f"Failed to send verification code: {result.get('error', 'Unknown error')}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send verification code: {str(e)}")
+
+@router.post("/reset-password/confirm", response_model=AuthResponse, summary="Reset password with OTP")
+async def reset_password_with_otp(payload: ResetPasswordWithOtpRequest):
+    """Reset user password using OTP verification"""
+    try:
+        # Verify OTP with type 'recovery'
+        verify_response = supabase_manager.client.auth.verify_otp({
+            "email": str(payload.email),
+            "token": payload.otp,
+            "type": "recovery"
+        })
+
+        if getattr(verify_response, 'error', None):
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+
+        update_response = supabase_manager.client.auth.update_user({
+            "password": payload.new_password
+        })
+
+        if getattr(update_response, 'error', None):
+            raise HTTPException(status_code=400, detail="Failed to update password")
+
+        return AuthResponse(success=True, message="Password updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reset password: {str(e)}")
 
 @router.get("/me", response_model=AuthResponse, summary="Get current user profile")
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):

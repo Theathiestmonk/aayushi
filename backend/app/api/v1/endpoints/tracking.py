@@ -193,7 +193,6 @@ async def get_weekly_report():
         "weight_change_kg": -0.5
     }
 
-<<<<<<< HEAD
 @router.get("/workout-plans")
 async def get_workout_plans():
     """Get workout plans for current user"""
@@ -229,7 +228,6 @@ async def get_tracking_stats():
             "improvement_areas": ["Consistency", "Endurance"]
         }
     }
-=======
 # Health Metrics Endpoints
 @router.get("/health-metrics", response_model=HealthMetricsResponse)
 async def get_health_metrics(
@@ -399,7 +397,6 @@ async def get_health_metrics_history(
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch health metrics history: {str(e)}")
->>>>>>> 59b928691d5d743416f639722c65bf906d05a367
 
 
 

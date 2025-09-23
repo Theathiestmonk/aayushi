@@ -287,13 +287,22 @@ class SupabaseManager:
             Password reset result
         """
         try:
-            self.client.auth.reset_password_email(email)
+            # Include redirect URL so the recovery flow knows where to return
+            redirect_base = os.getenv("FRONTEND_URL") or "http://localhost:3000"
+            redirect_url = f"{redirect_base.rstrip('/')}/reset-password"
+            
+            try:
+                self.client.auth.reset_password_email(email, {"redirect_to": redirect_url})
+            except TypeError:
+                # Some SDK versions accept keyword options
+                self.client.auth.reset_password_email(email, options={"redirect_to": redirect_url})
             
             logger.info(f"✅ Password reset email sent: {email}")
             
             return {
                 "success": True,
-                "message": "Password reset email sent"
+                "message": "Password reset email sent",
+                "redirect_to": redirect_url
             }
             
         except Exception as e:
